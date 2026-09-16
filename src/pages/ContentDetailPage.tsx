@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getContentBySlug } from '../services/contentService';
-import { ContentItem, SectionId } from '../types/content';
+import { getContentBySlug, getContentTags, getRelatedContent } from '../services/contentService';
+import { ContentItem, SectionId, Tag } from '../types/content';
 import { Container } from '../components/common/Container';
 import { Badge } from '../components/common/Badge';
 import { Link } from '../router/RouterContext';
@@ -9,6 +9,7 @@ import {
   Calendar,
   Sparkles,
   ArrowLeft,
+  ArrowRight,
   ExternalLink,
   Download,
   Tag as TagIcon,
@@ -86,15 +87,30 @@ const SECTION_INFO: Record<
 
 export function ContentDetailPage({ slug }: ContentDetailPageProps) {
   const [content, setContent] = useState<ContentItem | null>(null);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [relatedItems, setRelatedItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [hasError, setHasError] = useState<boolean>(false);
 
-  const fetchItem = async (targetSlug: string) => {
+  const fetchItemAndRelations = async (targetSlug: string) => {
     setLoading(true);
     setHasError(false);
     try {
       const item = await getContentBySlug(targetSlug);
       setContent(item);
+
+      if (item && item.id) {
+        // Fetch tags and related content in parallel with error guarding
+        const [loadedTags, loadedRelated] = await Promise.all([
+          getContentTags(item.id).catch(() => []),
+          getRelatedContent(item.id).catch(() => []),
+        ]);
+        setTags(loadedTags);
+        setRelatedItems(loadedRelated);
+      } else {
+        setTags([]);
+        setRelatedItems([]);
+      }
     } catch {
       setHasError(true);
     } finally {
@@ -110,8 +126,24 @@ export function ContentDetailPage({ slug }: ContentDetailPageProps) {
       setHasError(false);
       try {
         const item = await getContentBySlug(slug);
-        if (isMounted) {
-          setContent(item);
+        if (!isMounted) return;
+
+        setContent(item);
+
+        if (item && item.id) {
+          const [loadedTags, loadedRelated] = await Promise.all([
+            getContentTags(item.id).catch(() => []),
+            getRelatedContent(item.id).catch(() => []),
+          ]);
+          if (isMounted) {
+            setTags(loadedTags);
+            setRelatedItems(loadedRelated);
+          }
+        } else {
+          if (isMounted) {
+            setTags([]);
+            setRelatedItems([]);
+          }
         }
       } catch {
         if (isMounted) {
@@ -201,7 +233,7 @@ export function ContentDetailPage({ slug }: ContentDetailPageProps) {
             </p>
             <div className="pt-3 flex flex-wrap justify-center items-center gap-3">
               <button
-                onClick={() => fetchItem(slug)}
+                onClick={() => fetchItemAndRelations(slug)}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-stone-900 text-stone-50 text-sm font-medium hover:bg-stone-800 transition-colors shadow-2xs cursor-pointer"
               >
                 <RefreshCw className="w-4 h-4" aria-hidden="true" />
@@ -404,6 +436,26 @@ export function ContentDetailPage({ slug }: ContentDetailPageProps) {
           </div>
         )}
 
+        {/* Tags Section (Only displayed when tags exist) */}
+        {tags.length > 0 && (
+          <div id="content-detail-tags" className="pt-6 my-6 border-t border-stone-200 space-y-3">
+            <h2 className="text-xs font-mono uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
+              <TagIcon className="w-3.5 h-3.5 text-stone-400" aria-hidden="true" />
+              <span>Tagged Topics</span>
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {tags.map((tag) => (
+                <span
+                  key={tag.id}
+                  className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-stone-100 text-stone-700 border border-stone-200"
+                >
+                  #{tag.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* External URL & File Links (Only when available) */}
         {(content.external_url || content.file_url) && (
           <div className="pt-8 my-8 border-t border-stone-200 space-y-4">
@@ -452,6 +504,65 @@ export function ContentDetailPage({ slug }: ContentDetailPageProps) {
               )}
             </div>
           </div>
+        )}
+
+        {/* Related Content Section (Only displayed when related public items exist) */}
+        {relatedItems.length > 0 && (
+          <section id="content-detail-related" className="pt-10 my-10 border-t border-stone-200 space-y-6">
+            <div>
+              <h2 className="font-serif text-xl sm:text-2xl font-medium text-stone-950">
+                Related Content
+              </h2>
+              <p className="text-xs sm:text-sm text-stone-600 mt-1">
+                Connected treatises, study materials, and investigations across the knowledge repository.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {relatedItems.map((item) => {
+                const relFormattedType = formatContentType(item.content_type);
+                return (
+                  <Link
+                    key={item.id}
+                    href={`/content/${item.slug}`}
+                    className="flex flex-col justify-between p-5 rounded-xl border border-stone-200 bg-white hover:border-stone-400 hover:shadow-xs transition-all group cursor-pointer"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {item.category && item.category.trim() !== '' && (
+                          <span className="text-xs font-mono text-stone-600 bg-stone-100 px-2 py-0.5 rounded">
+                            {item.category}
+                          </span>
+                        )}
+                        {relFormattedType && (
+                          <span className="text-2xs font-mono uppercase tracking-wider text-stone-400">
+                            {relFormattedType}
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="font-serif text-base sm:text-lg font-medium text-stone-950 group-hover:text-stone-800 transition-colors line-clamp-2">
+                        {item.title}
+                      </h3>
+
+                      {item.description && item.description.trim() !== '' && (
+                        <p className="text-xs sm:text-sm text-stone-600 line-clamp-2 leading-relaxed">
+                          {item.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-end text-xs font-medium text-stone-700 group-hover:text-stone-950">
+                      <span className="inline-flex items-center gap-1">
+                        <span>View Publication</span>
+                        <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
         )}
 
         {/* Footer Navigation */}

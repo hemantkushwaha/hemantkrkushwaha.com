@@ -2,6 +2,7 @@ import { GraduationCap, Microscope, Compass, Feather, ArrowUpRight } from 'lucid
 import { domains } from '../../config/domains';
 import { Container } from '../common/Container';
 import { Card } from '../common/Card';
+import { Link } from '../../router/RouterContext';
 
 const iconMap = {
   academics: GraduationCap,
@@ -37,9 +38,9 @@ export function DomainGrid() {
             const Icon = iconMap[domain.id];
 
             return (
-              <a
+              <Link
                 key={domain.id}
-                href={`#${domain.id}`}
+                href={`/${domain.id}`}
                 className="group block h-full text-left rounded-xl focus-visible:outline-2 focus-visible:outline-stone-900"
               >
                 <Card
@@ -98,12 +99,35 @@ export function DomainGrid() {
                     <ArrowUpRight className="w-4 h-4 text-stone-400 group-hover:text-stone-900 transition-colors" aria-hidden="true" />
                   </div>
                 </Card>
-              </a>
+              </Link>
             );
           })}
+        </div>
+
+        {/* About Section Navigation Banner */}
+        <div className="mt-12 pt-10 border-t border-stone-200">
+          <div className="rounded-xl border border-stone-200 bg-white p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6 shadow-2xs">
+            <div className="space-y-1">
+              <span className="text-xs font-mono uppercase tracking-wider text-stone-500">
+                Biographical &amp; Academic Overview
+              </span>
+              <h3 className="font-serif text-xl sm:text-2xl font-medium text-stone-950">
+                About Hemant Kumar Kushwaha
+              </h3>
+              <p className="text-xs sm:text-sm text-stone-600 leading-relaxed max-w-xl">
+                Teacher · Researcher · Thinker · Writer — Profile overview, research interests, teaching areas, and contact information.
+              </p>
+            </div>
+            <Link
+              href="/about"
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-stone-900 text-stone-50 text-sm font-medium hover:bg-stone-800 transition-colors shrink-0 focus-visible:outline-2 focus-visible:outline-stone-900 min-h-[44px]"
+            >
+              <span>View About Page</span>
+              <ArrowUpRight className="w-4 h-4" aria-hidden="true" />
+            </Link>
+          </div>
         </div>
       </Container>
     </section>
   );
 }
-

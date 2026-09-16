@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Menu, X } from 'lucide-react';
 import { siteConfig } from '../../config/site';
 import { Container } from '../common/Container';
+import { Link, useRouter } from '../../router/RouterContext';
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { path } = useRouter();
+  const navRef = useRef<HTMLElement>(null);
 
   const toggleMobileMenu = () => {
     setMobileMenuOpen((prev) => !prev);
@@ -14,26 +17,43 @@ export function Header() {
     setMobileMenuOpen(false);
   };
 
+  // Close mobile menu on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && mobileMenuOpen) {
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mobileMenuOpen]);
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [path]);
+
   return (
     <header
       id="site-header"
+      ref={navRef}
       className="sticky top-0 z-40 w-full border-b border-stone-200/80 bg-stone-50/95 backdrop-blur-xs"
     >
       <Container size="xl">
-        <div className="flex h-18 sm:h-20 items-center justify-between">
+        <div className="flex h-20 items-center justify-between">
           {/* Logo / Author Branding */}
-          <a
+          <Link
             id="brand-link"
-            href="#top"
+            href="/"
             className="group flex flex-col focus-visible:outline-2 focus-visible:outline-stone-900 rounded-sm py-1"
           >
-            <span className="font-serif text-xl sm:text-2xl font-medium tracking-tight text-stone-950 transition-colors group-hover:text-stone-700">
+            <span className="font-serif text-lg sm:text-xl md:text-2xl font-medium tracking-tight text-stone-950 transition-colors group-hover:text-stone-700">
               {siteConfig.name}
             </span>
-            <span className="text-[10px] sm:text-xs tracking-wider uppercase text-stone-500 font-sans">
-              Knowledge Platform
+            <span className="text-[10px] sm:text-xs tracking-wider text-stone-500 font-sans">
+              Teacher · Researcher · Thinker · Writer
             </span>
-          </a>
+          </Link>
 
           {/* Desktop Navigation */}
           <nav
@@ -42,13 +62,14 @@ export function Header() {
             className="hidden md:flex items-center gap-1 lg:gap-2"
           >
             {siteConfig.navLinks.map((link) => (
-              <a
+              <Link
                 key={link.label}
                 href={link.href}
-                className="px-3.5 py-2 text-sm font-medium text-stone-700 hover:text-stone-950 hover:bg-stone-100/80 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-stone-900"
+                className="px-3.5 py-2 text-sm font-medium text-stone-700 hover:text-stone-950 hover:bg-stone-100 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-stone-900"
+                activeClassName="text-stone-950 bg-stone-200/70 font-semibold"
               >
                 {link.label}
-              </a>
+              </Link>
             ))}
           </nav>
 
@@ -77,17 +98,18 @@ export function Header() {
           <nav
             id="mobile-navigation"
             aria-label="Mobile Navigation"
-            className="md:hidden py-4 border-t border-stone-200 space-y-1"
+            className="md:hidden py-4 border-t border-stone-200 space-y-1 bg-stone-50 max-h-[calc(100vh-5rem)] overflow-y-auto"
           >
             {siteConfig.navLinks.map((link) => (
-              <a
+              <Link
                 key={link.label}
                 href={link.href}
                 onClick={closeMobileMenu}
                 className="flex items-center justify-between px-4 py-3 text-base font-medium text-stone-800 hover:bg-stone-100 rounded-lg min-h-[44px]"
+                activeClassName="text-stone-950 bg-stone-200/80 font-semibold"
               >
                 <span>{link.label}</span>
-              </a>
+              </Link>
             ))}
           </nav>
         )}

@@ -11,9 +11,11 @@ export const siteConfig = {
   description:
     'Personal knowledge platform of Hemant Kumar Kushwaha covering Academics, Research, Philosophy, and Writings.',
   navLinks: [
-    { label: 'Academics', href: '#academics', isPlaceholder: true },
-    { label: 'Research', href: '#research', isPlaceholder: true },
-    { label: 'Philosophy', href: '#philosophy', isPlaceholder: true },
-    { label: 'Writings', href: '#writings', isPlaceholder: true },
+    { label: 'Home', href: '/' },
+    { label: 'Academics', href: '/academics' },
+    { label: 'Research', href: '/research' },
+    { label: 'Philosophy', href: '/philosophy' },
+    { label: 'Writings', href: '/writings' },
+    { label: 'About', href: '/about' },
   ] as NavLink[],
 };

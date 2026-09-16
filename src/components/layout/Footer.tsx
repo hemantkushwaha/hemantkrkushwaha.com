@@ -1,5 +1,6 @@
 import { siteConfig } from '../../config/site';
 import { Container } from '../common/Container';
+import { Link } from '../../router/RouterContext';
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -25,20 +26,20 @@ export function Footer() {
             </p>
           </div>
 
-          {/* Knowledge Domains */}
+          {/* Navigation Directory */}
           <div className="space-y-2">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-900">
-              Knowledge Domains
+              Platform Navigation
             </h4>
             <ul className="space-y-1.5 text-xs">
               {siteConfig.navLinks.map((item) => (
                 <li key={item.label}>
-                  <a
+                  <Link
                     href={item.href}
                     className="text-stone-600 hover:text-stone-950 transition-colors"
                   >
                     {item.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>

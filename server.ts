@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
@@ -15,6 +16,28 @@ async function startServer() {
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'development'
+    });
+  });
+
+  // Step 3: Database Connection Status API (safe diagnostics, zero secret leakage)
+  app.get('/api/database/status', (req, res) => {
+    const hasUrl = Boolean(process.env.VITE_SUPABASE_URL);
+    const hasPublishableKey = Boolean(process.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+    const hasSecretKey = Boolean(process.env.SUPABASE_SECRET_KEY);
+
+    res.json({
+      database: 'PostgreSQL (Supabase)',
+      architecture: 'Unified Content Model',
+      tables: ['content', 'tags', 'content_tags', 'content_relationships'],
+      configured: hasUrl && hasPublishableKey,
+      connectionDetails: {
+        hasSupabaseUrl: hasUrl,
+        hasSupabasePublishableKey: hasPublishableKey,
+        hasSecretKey: hasSecretKey,
+      },
+      message: (hasUrl && hasPublishableKey)
+        ? 'Supabase connection parameters detected in environment.'
+        : 'Supabase credentials not yet supplied in environment. System is ready to connect upon credentials entry.'
     });
   });
 

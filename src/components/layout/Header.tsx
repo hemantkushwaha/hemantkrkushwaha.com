@@ -35,7 +35,7 @@ export function Header() {
             </span>
           </a>
 
-          {/* Desktop Navigation Placeholder */}
+          {/* Desktop Navigation */}
           <nav
             id="desktop-nav"
             aria-label="Main Navigation"
@@ -50,10 +50,6 @@ export function Header() {
                 {link.label}
               </a>
             ))}
-            <div className="h-4 w-px bg-stone-300 mx-2" aria-hidden="true" />
-            <span className="text-xs text-stone-400 font-mono">
-              Step 1 Foundation
-            </span>
           </nav>
 
           {/* Mobile Menu Toggle */}
@@ -91,14 +87,8 @@ export function Header() {
                 className="flex items-center justify-between px-4 py-3 text-base font-medium text-stone-800 hover:bg-stone-100 rounded-lg min-h-[44px]"
               >
                 <span>{link.label}</span>
-                <span className="text-xs text-stone-400 font-mono">
-                  Placeholder
-                </span>
               </a>
             ))}
-            <div className="pt-3 px-4 text-xs text-stone-500 font-mono border-t border-stone-100 mt-2">
-              Domain: {siteConfig.domain}
-            </div>
           </nav>
         )}
       </Container>

@@ -1,6 +1,6 @@
 {
-  "name": "Hemant Kushwaha Knowledge Platform",
-  "description": "Personal knowledge platform of Hemant Kushwaha covering Academics, Research, Philosophy, and Writings.",
+  "name": "Hemant Kumar Kushwaha Knowledge Platform",
+  "description": "Personal knowledge platform of Hemant Kumar Kushwaha covering Academics, Research, Philosophy, and Writings.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

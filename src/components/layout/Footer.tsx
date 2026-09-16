@@ -11,21 +11,21 @@ export function Footer() {
     >
       <Container size="xl">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
-          {/* Brand & Purpose */}
+          {/* Brand & Roles */}
           <div className="space-y-2">
             <h3 className="font-serif text-lg font-medium text-stone-900 tracking-tight">
               {siteConfig.name}
             </h3>
-            <p className="text-xs text-stone-600 leading-relaxed max-w-sm">
-              A dedicated digital archive and intellectual commons encompassing teaching,
-              inquiry, contemplative philosophy, and literature.
+            <p className="text-xs font-sans text-stone-600">
+              {siteConfig.tagline}
             </p>
-            <p className="text-xs font-mono text-stone-500 pt-1">
-              {siteConfig.domain}
+            <p className="text-xs text-stone-500 leading-relaxed max-w-sm pt-1">
+              A personal digital archive and intellectual commons encompassing teaching,
+              inquiry, contemplative philosophy, and literature.
             </p>
           </div>
 
-          {/* Architecture Outline */}
+          {/* Knowledge Domains */}
           <div className="space-y-2">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-900">
               Knowledge Domains
@@ -44,20 +44,17 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Development Status */}
+          {/* Perspective / Platform Vision */}
           <div className="space-y-2">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-900">
-              Development Phase
+              Platform Vision
             </h4>
-            <p className="text-xs text-stone-600 leading-relaxed">
-              Step 1: Application Foundation &amp; Structural Architecture.
-              Awaiting review and approval before proceeding to content modules.
+            <blockquote className="font-serif italic text-xs text-stone-600 leading-relaxed border-l-2 border-stone-300 pl-3">
+              &ldquo;{siteConfig.quote}&rdquo;
+            </blockquote>
+            <p className="text-xs text-stone-500 pt-2">
+              hemantkrkushwaha.com
             </p>
-            <div className="pt-2">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-stone-200 text-stone-800">
-                Production Foundation Ready
-              </span>
-            </div>
           </div>
         </div>
 
@@ -66,8 +63,8 @@ export function Footer() {
           <p>
             &copy; {currentYear} {siteConfig.title}. All rights reserved.
           </p>
-          <p className="font-mono text-[11px]">
-            Domain: {siteConfig.domain} &bull; Vercel &amp; GitHub Ready
+          <p className="text-stone-500">
+            {siteConfig.domain}
           </p>
         </div>
       </Container>

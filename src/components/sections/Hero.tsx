@@ -10,17 +10,6 @@ export function Hero() {
     >
       <Container size="lg">
         <div className="max-w-3xl mx-auto text-center space-y-6">
-          {/* Subtle Foundation Badge */}
-          <div className="flex justify-center">
-            <span
-              id="foundation-badge"
-              className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-mono bg-stone-100 text-stone-700 border border-stone-200"
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-              Step 1: Production Foundation
-            </span>
-          </div>
-
           {/* Primary Name */}
           <h1
             id="hero-author-name"

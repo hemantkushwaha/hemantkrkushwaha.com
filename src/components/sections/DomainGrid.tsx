@@ -1,4 +1,4 @@
-import { GraduationCap, Microscope, Compass, Feather, Clock } from 'lucide-react';
+import { GraduationCap, Microscope, Compass, Feather, ArrowUpRight } from 'lucide-react';
 import { domains } from '../../config/domains';
 import { Container } from '../common/Container';
 import { Card } from '../common/Card';
@@ -20,50 +20,46 @@ export function DomainGrid() {
       <Container size="xl">
         {/* Section Header */}
         <div className="max-w-2xl mb-10 sm:mb-12">
-          <span className="text-xs font-mono uppercase tracking-wider text-stone-500">
-            Platform Architecture
-          </span>
           <h2
             id="domains-heading"
-            className="font-serif text-2xl sm:text-3xl font-medium text-stone-950 mt-1"
+            className="font-serif text-2xl sm:text-3xl font-medium text-stone-950"
           >
-            Core Knowledge Domains
+            Knowledge Domains
           </h2>
-          <p className="text-sm text-stone-600 mt-2 leading-relaxed">
-            Four foundational pillars uniting teaching, empirical research, deep reflection, and creative literary expression.
+          <p className="text-sm sm:text-base text-stone-600 mt-2 leading-relaxed">
+            Four foundational areas uniting teaching, empirical research, deep reflection, and creative literary expression.
           </p>
         </div>
 
-        {/* 4 Cards Grid */}
+        {/* 4 Navigation Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
           {domains.map((domain) => {
             const Icon = iconMap[domain.id];
 
             return (
-              <article
+              <a
                 key={domain.id}
-                id={`card-${domain.id}`}
-                className="relative"
+                href={`#${domain.id}`}
+                className="group block h-full text-left rounded-xl focus-visible:outline-2 focus-visible:outline-stone-900"
               >
                 <Card
                   interactive
-                  className="h-full flex flex-col justify-between"
+                  className="h-full flex flex-col justify-between group-hover:border-stone-400 group-hover:shadow-sm transition-all duration-200"
                 >
                   <div className="space-y-4">
-                    {/* Header: Icon + Status */}
+                    {/* Header: Icon & Subtitle */}
                     <div className="flex items-center justify-between gap-4">
-                      <div className="p-3 rounded-lg bg-stone-100 text-stone-900">
+                      <div className="p-3 rounded-lg bg-stone-100 text-stone-900 group-hover:bg-stone-200/80 transition-colors">
                         <Icon className="w-5 h-5" aria-hidden="true" />
                       </div>
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono bg-stone-100 text-stone-600 border border-stone-200">
-                        <Clock className="w-3 h-3 text-stone-400" />
-                        Placeholder &bull; Phase Pending
+                      <span className="text-xs font-medium text-stone-500">
+                        {domain.subtitle}
                       </span>
                     </div>
 
                     {/* Title & Tagline */}
                     <div>
-                      <h3 className="font-serif text-xl sm:text-2xl font-medium text-stone-950">
+                      <h3 className="font-serif text-xl sm:text-2xl font-medium text-stone-950 group-hover:text-stone-800 transition-colors">
                         {domain.title}
                       </h3>
                       <p className="font-serif italic text-sm text-stone-600 mt-1">
@@ -76,16 +72,16 @@ export function DomainGrid() {
                       {domain.summary}
                     </p>
 
-                    {/* Planned Architecture Preview */}
+                    {/* Focus Areas Preview */}
                     <div className="pt-2">
-                      <p className="text-xs font-mono uppercase tracking-wider text-stone-400 mb-2">
-                        Planned Modules
+                      <p className="text-xs font-medium uppercase tracking-wider text-stone-400 mb-2">
+                        Focus Areas
                       </p>
-                      <ul className="flex flex-wrap gap-1.5" aria-label={`Planned modules for ${domain.title}`}>
+                      <ul className="flex flex-wrap gap-1.5" aria-label={`Focus areas for ${domain.title}`}>
                         {domain.plannedCategories.map((category) => (
                           <li
                             key={category}
-                            className="text-xs px-2.5 py-1 rounded-md bg-stone-100/80 text-stone-700 border border-stone-200/60"
+                            className="text-xs px-2.5 py-1 rounded-md bg-stone-100 text-stone-700 border border-stone-200/60"
                           >
                             {category}
                           </li>
@@ -94,13 +90,15 @@ export function DomainGrid() {
                     </div>
                   </div>
 
-                  {/* Visual Placeholder Indicator */}
-                  <div className="pt-6 mt-6 border-t border-stone-100 flex items-center justify-between text-xs text-stone-500">
-                    <span className="font-mono">ID: {domain.id}</span>
-                    <span className="font-medium text-stone-400">Functionality ready for Step 2+</span>
+                  {/* Navigation Footer */}
+                  <div className="pt-5 mt-6 border-t border-stone-100 flex items-center justify-between text-xs text-stone-700">
+                    <span className="font-medium group-hover:text-stone-950 transition-colors">
+                      Explore {domain.title}
+                    </span>
+                    <ArrowUpRight className="w-4 h-4 text-stone-400 group-hover:text-stone-900 transition-colors" aria-hidden="true" />
                   </div>
                 </Card>
-              </article>
+              </a>
             );
           })}
         </div>
@@ -108,3 +106,4 @@ export function DomainGrid() {
     </section>
   );
 }
+

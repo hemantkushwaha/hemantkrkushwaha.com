@@ -16,12 +16,26 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 // Cached client instance
 let supabaseClientInstance: SupabaseClient | null = null;
 
+function getPublicEnvVar(key: 'VITE_SUPABASE_URL' | 'VITE_SUPABASE_PUBLISHABLE_KEY'): string | undefined {
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+      return import.meta.env[key];
+    }
+  } catch {
+    // Ignore error in non-Vite context
+  }
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key];
+  }
+  return undefined;
+}
+
 /**
  * Returns whether Supabase public credentials have been supplied in the environment.
  */
 export function isSupabaseConfigured(): boolean {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const url = getPublicEnvVar('VITE_SUPABASE_URL');
+  const publishableKey = getPublicEnvVar('VITE_SUPABASE_PUBLISHABLE_KEY');
   return Boolean(url && publishableKey && url.trim().length > 0 && publishableKey.trim().length > 0);
 }
 
@@ -34,8 +48,8 @@ export function getSupabaseClient(): SupabaseClient | null {
     return supabaseClientInstance;
   }
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const supabaseUrl = getPublicEnvVar('VITE_SUPABASE_URL');
+  const publishableKey = getPublicEnvVar('VITE_SUPABASE_PUBLISHABLE_KEY');
 
   if (!supabaseUrl || !publishableKey) {
     return null;

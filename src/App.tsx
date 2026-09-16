@@ -6,11 +6,20 @@ import { ResearchPage } from './pages/ResearchPage';
 import { PhilosophyPage } from './pages/PhilosophyPage';
 import { WritingsPage } from './pages/WritingsPage';
 import { AboutPage } from './pages/AboutPage';
+import { ContentDetailPage } from './pages/ContentDetailPage';
 import { Container } from './components/common/Container';
 import { Compass } from 'lucide-react';
 
 function PageRouter() {
   const { path } = useRouter();
+
+  // Dynamic route: /content/:slug
+  if (path.startsWith('/content/')) {
+    const rawSlug = path.slice('/content/'.length).split('/')[0]?.trim();
+    if (rawSlug) {
+      return <ContentDetailPage slug={rawSlug} key={rawSlug} />;
+    }
+  }
 
   switch (path) {
     case '/':

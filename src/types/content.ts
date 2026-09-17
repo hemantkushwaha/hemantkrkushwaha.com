@@ -170,3 +170,6 @@ export interface EnrichedContentItem extends ContentItem {
     content: ContentItem;
   }[];
 }
+
+// Re-export manifest types
+export * from './manifest';

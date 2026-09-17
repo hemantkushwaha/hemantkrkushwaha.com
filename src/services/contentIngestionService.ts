@@ -27,6 +27,16 @@ import {
   normalizeContentManifest,
   ManifestRelatedItem,
 } from './manifestService';
+import {
+  validateFileMetadata,
+  uploadFile,
+  deleteFile,
+  generateDeterministicStoragePath,
+  StorageUploadParams,
+  StorageUploadResult,
+  StorageDeleteParams,
+  StorageDeleteResult,
+} from './storageService';
 
 export interface IngestionOptions {
   /**
@@ -39,6 +49,24 @@ export interface IngestionOptions {
    * without committing changes to the database.
    */
   dryRun?: boolean;
+  /**
+   * Optional file resource accompanying the manifest (Step 11 — File Ingestion Foundation).
+   * Orchestrated through uploadFile before database record creation.
+   */
+  fileResource?: {
+    data: Buffer | Uint8Array | Blob;
+    fileName: string;
+    fileType?: string; // MIME type e.g. 'application/pdf'
+    fileSize?: number; // Size in bytes
+    filePath?: string; // Optional custom target path
+  };
+  /**
+   * Optional storage service overrides for testing or isolated mocks.
+   */
+  storageService?: {
+    uploadFile: (params: StorageUploadParams, client?: any) => Promise<StorageUploadResult>;
+    deleteFile: (params: StorageDeleteParams, client?: any) => Promise<StorageDeleteResult>;
+  };
 }
 
 export interface IngestionResult {
@@ -49,6 +77,9 @@ export interface IngestionResult {
   tagsCreated: number;
   tagsAssociated: number;
   relationshipsCreated: number;
+  fileUploaded?: boolean;
+  filePath?: string | null;
+  fileCleanedUp?: boolean;
   warnings?: string[];
   errors: string[];
 }
@@ -83,7 +114,11 @@ export function generateDeterministicSlug(title: string): string {
  * Maps a normalized manifest to the Supabase `content` table schema.
  * Preserves user intent as the absolute single source of truth.
  */
-function mapManifestToContentRecord(normalized: NormalizedContentManifest, slug: string): Record<string, unknown> {
+function mapManifestToContentRecord(
+  normalized: NormalizedContentManifest,
+  slug: string,
+  resolvedFileUrl?: string | null
+): Record<string, unknown> {
   const status: ContentStatus = normalized.published ? 'published' : 'draft';
   const publishedAt: string | null = normalized.published ? new Date().toISOString() : null;
 
@@ -97,7 +132,7 @@ function mapManifestToContentRecord(normalized: NormalizedContentManifest, slug:
     content_type: normalized.content_type,
     body: null, // Body content is populated during document/file ingestion
     thumbnail_url: null,
-    file_url: normalized.file_name,
+    file_url: resolvedFileUrl !== undefined ? resolvedFileUrl : (normalized.file_path || normalized.file_name),
     external_url: normalized.external_url,
     language: normalized.language,
     status: status,
@@ -120,7 +155,7 @@ export async function ingestContent(
   const warnings: string[] = [];
   const errors: string[] = [];
 
-  // 1. Validation
+  // 1. Validation of Manifest
   const validation = validateContentManifest(rawManifest);
   if (!validation.valid) {
     return {
@@ -131,8 +166,33 @@ export async function ingestContent(
       tagsCreated: 0,
       tagsAssociated: 0,
       relationshipsCreated: 0,
+      fileUploaded: false,
       errors: validation.errors,
     };
+  }
+
+  // 1b. Validation of File Resource (if provided in options)
+  if (options.fileResource) {
+    const fileValidation = validateFileMetadata({
+      file_name: options.fileResource.fileName,
+      file_type: options.fileResource.fileType,
+      file_size: options.fileResource.fileSize,
+      file_path: options.fileResource.filePath,
+    });
+
+    if (!fileValidation.valid) {
+      return {
+        success: false,
+        content: null,
+        slug: null,
+        topic: null,
+        tagsCreated: 0,
+        tagsAssociated: 0,
+        relationshipsCreated: 0,
+        fileUploaded: false,
+        errors: fileValidation.errors,
+      };
+    }
   }
 
   // 2. Normalization
@@ -149,6 +209,7 @@ export async function ingestContent(
       tagsCreated: 0,
       tagsAssociated: 0,
       relationshipsCreated: 0,
+      fileUploaded: false,
       errors: ['Failed to generate a valid URL slug from the title.'],
     };
   }
@@ -164,6 +225,7 @@ export async function ingestContent(
       tagsCreated: 0,
       tagsAssociated: 0,
       relationshipsCreated: 0,
+      fileUploaded: false,
       errors: [
         'Supabase client is not configured or unavailable. Set environment variables to enable persistence.',
       ],
@@ -172,6 +234,17 @@ export async function ingestContent(
 
   // 5. Dry-Run Check
   if (options.dryRun) {
+    const dryRunPath = options.fileResource
+      ? options.fileResource.filePath ||
+        generateDeterministicStoragePath({
+          section: normalized.section,
+          category: normalized.category,
+          topic: normalized.topic,
+          contentType: normalized.content_type,
+          fileName: options.fileResource.fileName,
+        })
+      : null;
+
     return {
       success: true,
       content: null,
@@ -180,6 +253,8 @@ export async function ingestContent(
       tagsCreated: 0,
       tagsAssociated: normalized.tags.length,
       relationshipsCreated: normalized.related_content.length,
+      fileUploaded: false,
+      filePath: dryRunPath,
       warnings: ['Dry run mode: validation and normalization succeeded without database writes.'],
       errors: [],
     };
@@ -203,6 +278,7 @@ export async function ingestContent(
         tagsCreated: 0,
         tagsAssociated: 0,
         relationshipsCreated: 0,
+        fileUploaded: false,
         errors: [`Database check failed: ${checkError.message}`],
       };
     }
@@ -216,12 +292,59 @@ export async function ingestContent(
         tagsCreated: 0,
         tagsAssociated: 0,
         relationshipsCreated: 0,
+        fileUploaded: false,
         errors: [`Duplicate content error: A publication with slug "${slug}" already exists.`],
       };
     }
 
-    // 7. Insert Content Record
-    const contentRecordPayload = mapManifestToContentRecord(normalized, slug);
+    // 7. File Ingestion Step (orchestrated BEFORE database insertion)
+    let uploadedStoragePath: string | null = null;
+    let resolvedFileUrl: string | null = null;
+
+    if (options.fileResource) {
+      const targetStoragePath =
+        options.fileResource.filePath ||
+        generateDeterministicStoragePath({
+          section: normalized.section,
+          category: normalized.category,
+          topic: normalized.topic,
+          contentType: normalized.content_type,
+          fileName: options.fileResource.fileName,
+        });
+
+      const uploadFn = options.storageService?.uploadFile || uploadFile;
+      const uploadResult = await uploadFn(
+        {
+          path: targetStoragePath,
+          data: options.fileResource.data,
+          contentType: options.fileResource.fileType || 'application/octet-stream',
+        },
+        client
+      );
+
+      if (!uploadResult.success) {
+        // Architectural Failure Boundary: If file upload fails, do not create an incomplete content record.
+        return {
+          success: false,
+          content: null,
+          slug,
+          topic: normalized.topic,
+          tagsCreated: 0,
+          tagsAssociated: 0,
+          relationshipsCreated: 0,
+          fileUploaded: false,
+          errors: [
+            `File upload failed: ${uploadResult.error || 'Unknown storage upload error'}. Content record was not created.`,
+          ],
+        };
+      }
+
+      uploadedStoragePath = uploadResult.path;
+      resolvedFileUrl = uploadResult.publicUrl || uploadResult.path;
+    }
+
+    // 8. Insert Content Record
+    const contentRecordPayload = mapManifestToContentRecord(normalized, slug, resolvedFileUrl);
     const { data: insertedContent, error: insertError } = await client
       .from('content')
       .insert(contentRecordPayload)
@@ -229,6 +352,25 @@ export async function ingestContent(
       .single();
 
     if (insertError || !insertedContent) {
+      // Architectural Failure Boundary: If database insertion fails after a successful file upload,
+      // attempt safe cleanup of the newly uploaded file where possible.
+      let fileCleanedUp = false;
+      if (uploadedStoragePath) {
+        try {
+          const deleteFn = options.storageService?.deleteFile || deleteFile;
+          const deleteRes = await deleteFn({ path: uploadedStoragePath }, client);
+          fileCleanedUp = deleteRes.success;
+        } catch {
+          fileCleanedUp = false;
+        }
+      }
+
+      const cleanupNote = fileCleanedUp
+        ? ' Newly uploaded file was safely cleaned up.'
+        : uploadedStoragePath
+        ? ' Warning: Automatic cleanup of the uploaded file could not be confirmed.'
+        : '';
+
       // Catch RLS write permission error cleanly
       if (insertError && (insertError.code === '42501' || insertError.message.includes('row-level security'))) {
         return {
@@ -239,8 +381,10 @@ export async function ingestContent(
           tagsCreated: 0,
           tagsAssociated: 0,
           relationshipsCreated: 0,
+          fileUploaded: !!uploadedStoragePath,
+          fileCleanedUp,
           errors: [
-            'Database write denied by Row-Level Security (RLS). Content ingestion requires authenticated or server-side authority.',
+            `Database write denied by Row-Level Security (RLS). Content ingestion requires authenticated or server-side authority.${cleanupNote}`,
           ],
         };
       }
@@ -253,7 +397,9 @@ export async function ingestContent(
         tagsCreated: 0,
         tagsAssociated: 0,
         relationshipsCreated: 0,
-        errors: [`Content insertion failed: ${insertError?.message || 'Unknown database error'}`],
+        fileUploaded: !!uploadedStoragePath,
+        fileCleanedUp,
+        errors: [`Content insertion failed: ${insertError?.message || 'Unknown database error'}.${cleanupNote}`],
       };
     }
 
@@ -381,6 +527,8 @@ export async function ingestContent(
       tagsCreated: tagsCreatedCount,
       tagsAssociated: tagsAssociatedCount,
       relationshipsCreated: relationshipsCreatedCount,
+      fileUploaded: !!uploadedStoragePath,
+      filePath: uploadedStoragePath,
       warnings: warnings.length > 0 ? warnings : undefined,
       errors: errors.length > 0 ? errors : [],
     };

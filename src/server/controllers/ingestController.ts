@@ -90,6 +90,8 @@ export async function handleContentIngestion(req: Request, res: Response): Promi
       success: true,
       contentId: result.content?.id || (isDryRun ? 'dry-run-preview-id' : undefined),
       slug: result.slug,
+      fileUploaded: result.fileUploaded,
+      filePath: result.filePath,
     });
   } catch (err: any) {
     // Safe operational logging without secret exposure

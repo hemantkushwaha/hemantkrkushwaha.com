@@ -77,6 +77,9 @@ export interface ContentManifest {
   external_url?: string;
   source_url?: string;
   file_name?: string;
+  file_type?: string;
+  file_size?: number;
+  file_path?: string;
   related_content?: ManifestRelatedContent[];
   published?: boolean;
 }
@@ -103,6 +106,9 @@ export interface NormalizedContentManifest {
   external_url: string | null;
   source_url: string | null;
   file_name: string | null;
+  file_type: string | null;
+  file_size: number | null;
+  file_path: string | null;
   related_content: ManifestRelatedItem[];
   published: boolean;
 }
@@ -147,5 +153,8 @@ export interface ManifestIngestionPayload {
     topic_slug: string;
     source_url: string | null;
     file_name: string | null;
+    file_type: string | null;
+    file_size: number | null;
+    file_path: string | null;
   };
 }

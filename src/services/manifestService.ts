@@ -23,6 +23,7 @@ import {
   MANIFEST_CONTENT_TYPES,
   ManifestRelatedItem,
 } from '../types/manifest';
+import { validateFileMetadata } from './storageService';
 
 export * from '../types/manifest';
 
@@ -152,15 +153,38 @@ export function validateContentManifest(manifest: unknown): ManifestValidationRe
     errors.push('Field "published", when provided, must be a boolean.');
   }
 
-  // 9. Optional field: URLs and file name
+  // 9. Optional field: URLs and file resource metadata
   if (raw.external_url !== undefined && raw.external_url !== null && typeof raw.external_url !== 'string') {
     errors.push('Field "external_url", when provided, must be a string.');
   }
   if (raw.source_url !== undefined && raw.source_url !== null && typeof raw.source_url !== 'string') {
     errors.push('Field "source_url", when provided, must be a string.');
   }
+
+  // File metadata validation (Step 11 — File Ingestion Foundation)
   if (raw.file_name !== undefined && raw.file_name !== null && typeof raw.file_name !== 'string') {
     errors.push('Field "file_name", when provided, must be a string.');
+  }
+
+  const trimmedFileName = typeof raw.file_name === 'string' ? raw.file_name.trim() : null;
+  const hasFileAttributes =
+    raw.file_type !== undefined ||
+    raw.file_size !== undefined ||
+    raw.file_path !== undefined;
+
+  // Run full file validation if an actual file name or file attributes are provided
+  if (trimmedFileName || hasFileAttributes) {
+    const fileValidation = validateFileMetadata({
+      file_name: raw.file_name as string,
+      file_type: raw.file_type as string | undefined,
+      file_size: raw.file_size as number | undefined,
+      file_path: raw.file_path as string | undefined,
+      source_url: raw.source_url as string | undefined,
+    });
+
+    if (!fileValidation.valid) {
+      errors.push(...fileValidation.errors);
+    }
   }
 
   // 10. Optional field: related_content
@@ -231,6 +255,9 @@ export function normalizeContentManifest(manifest: ContentManifest): NormalizedC
   const cleanExternalUrl = manifest.external_url?.trim() || null;
   const cleanSourceUrl = manifest.source_url?.trim() || null;
   const cleanFileName = manifest.file_name?.trim() || null;
+  const cleanFileType = manifest.file_type?.trim().toLowerCase() || null;
+  const cleanFileSize = typeof manifest.file_size === 'number' && !isNaN(manifest.file_size) ? manifest.file_size : null;
+  const cleanFilePath = manifest.file_path?.trim() || null;
   const cleanLanguage = manifest.language?.trim() || 'en';
   const cleanVisibility = manifest.visibility || 'public';
   const cleanIsFeatured = manifest.is_featured ?? false;
@@ -253,6 +280,9 @@ export function normalizeContentManifest(manifest: ContentManifest): NormalizedC
     external_url: cleanExternalUrl,
     source_url: cleanSourceUrl,
     file_name: cleanFileName,
+    file_type: cleanFileType,
+    file_size: cleanFileSize,
+    file_path: cleanFilePath,
     related_content: cleanRelated,
     published: cleanPublished,
   };
@@ -280,7 +310,7 @@ export function prepareIngestionPayload(normalized: NormalizedContentManifest): 
       content_type: normalized.content_type,
       body: null, // Body or rich text is supplied by source file or notebook content during ingestion
       thumbnail_url: null,
-      file_url: normalized.file_name, // Bound to storage reference in future pipeline
+      file_url: normalized.file_path || normalized.file_name, // Bound to storage reference in ingestion pipeline
       external_url: normalized.external_url,
       language: normalized.language,
       status: normalized.published ? 'published' : 'draft',
@@ -297,6 +327,9 @@ export function prepareIngestionPayload(normalized: NormalizedContentManifest): 
       topic_slug: normalized.topic_slug,
       source_url: normalized.source_url,
       file_name: normalized.file_name,
+      file_type: normalized.file_type,
+      file_size: normalized.file_size,
+      file_path: normalized.file_path,
     },
   };
 }

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
+import { ingestRouter } from './src/server/routes/ingestRoutes';
 
 async function startServer() {
   const app = express();
@@ -40,6 +41,9 @@ async function startServer() {
         : 'Supabase credentials not yet supplied in environment. System is ready to connect upon credentials entry.'
     });
   });
+
+  // Step 10: Secure Server-Side Content Ingestion API
+  app.use('/api/ingest', ingestRouter);
 
   // Vite middleware for development or static serving for production
   if (process.env.NODE_ENV !== 'production') {

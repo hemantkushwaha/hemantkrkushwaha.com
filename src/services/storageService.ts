@@ -14,6 +14,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../lib/supabase';
+import { ContentStatus, ContentVisibility } from '../types/content';
 import {
   FileMetadata,
   FileValidationResult,
@@ -26,6 +27,11 @@ import {
   SupportedFileExtension,
   SUPPORTED_FILE_EXTENSIONS,
   SUPPORTED_MIME_TYPES,
+  SignedUrlParams,
+  SignedUrlResult,
+  AccessUser,
+  StorageAccessDecision,
+  SecureContentFileResponse,
 } from '../types/storage';
 
 export * from '../types/storage';
@@ -43,6 +49,14 @@ export const DEFAULT_STORAGE_BUCKET = 'content-files';
 export const DEFAULT_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
 /**
+ * Default signed URL expiration: 15 minutes (900 seconds).
+ * Configurable per request within safe boundary limits [60s, 86400s].
+ */
+export const DEFAULT_SIGNED_URL_EXPIRES_IN_SECONDS = 900;
+export const MIN_SIGNED_URL_EXPIRES_IN_SECONDS = 60; // 1 minute
+export const MAX_SIGNED_URL_EXPIRES_IN_SECONDS = 86400; // 24 hours
+
+/**
  * Returns the configured storage bucket name.
  */
 export function getStorageBucketName(): string {
@@ -50,6 +64,28 @@ export function getStorageBucketName(): string {
     return process.env.SUPABASE_STORAGE_BUCKET.trim();
   }
   return DEFAULT_STORAGE_BUCKET;
+}
+
+/**
+ * Validates that an accessed or requested bucket matches the platform's canonical bucket.
+ * Prevents arbitrary bucket access or bucket-name injection.
+ */
+export function validateBucketName(bucket?: string): { valid: boolean; error?: string; bucket: string } {
+  const canonicalBucket = getStorageBucketName();
+  if (!bucket || typeof bucket !== 'string' || bucket.trim().length === 0) {
+    return { valid: true, bucket: canonicalBucket };
+  }
+
+  const normalized = bucket.trim();
+  if (normalized !== canonicalBucket) {
+    return {
+      valid: false,
+      error: `Arbitrary bucket access is forbidden. Target bucket must resolve to "${canonicalBucket}".`,
+      bucket: normalized,
+    };
+  }
+
+  return { valid: true, bucket: canonicalBucket };
 }
 
 /**
@@ -92,10 +128,14 @@ export function sanitizeFileName(rawFileName: string): string {
 /**
  * Validates a storage path for safety.
  * Rejects:
- * - Relative traversal (..)
+ * - Empty or whitespace paths
+ * - Relative traversal (..) or single dot segments (.)
  * - Absolute paths (/ or \)
- * - Double slashes (//)
- * - Null bytes
+ * - Windows drive letters (C:)
+ * - Double slashes (// or \\)
+ * - Null bytes and ASCII control characters
+ * - URL-encoded traversal sequences (%2e, %2f, %5c)
+ * - Bucket name prefixes (e.g. content-files/...)
  */
 export function validateStoragePath(path: string): { valid: boolean; error?: string } {
   if (!path || typeof path !== 'string' || path.trim().length === 0) {
@@ -106,8 +146,29 @@ export function validateStoragePath(path: string): { valid: boolean; error?: str
     return { valid: false, error: 'Storage path contains null bytes.' };
   }
 
+  // Reject ASCII control characters (0-31 and 127)
+  if (/[\x00-\x1F\x7F]/.test(path)) {
+    return { valid: false, error: 'Storage path contains invalid control characters.' };
+  }
+
+  // Reject URL-encoded path traversal or separators
+  if (/%2e|%2f|%5c/i.test(path)) {
+    return { valid: false, error: 'Storage path contains encoded traversal sequences.' };
+  }
+
+  // Reject leading slashes or Windows backslashes
   if (path.startsWith('/') || path.startsWith('\\')) {
     return { valid: false, error: 'Storage path must be relative and cannot begin with a slash.' };
+  }
+
+  // Reject Windows drive letters (e.g. C:, D:)
+  if (/^[a-zA-Z]:/.test(path)) {
+    return { valid: false, error: 'Storage path must be relative and cannot contain drive letters.' };
+  }
+
+  // Reject consecutive slashes (// or \\)
+  if (/\/{2,}|\\{2,}/.test(path)) {
+    return { valid: false, error: 'Storage path contains invalid double slashes.' };
   }
 
   // Check for path traversal components (.. as a path segment)
@@ -116,6 +177,16 @@ export function validateStoragePath(path: string): { valid: boolean; error?: str
     if (seg === '..' || seg === '.') {
       return { valid: false, error: 'Storage path contains unsafe path traversal elements ("..").' };
     }
+    if (seg.trim() !== seg) {
+      return { valid: false, error: 'Storage path segments cannot contain leading or trailing whitespace.' };
+    }
+  }
+
+  // Prevent bucket name injection in relative path (e.g. content-files/section/...)
+  const canonicalBucket = getStorageBucketName().toLowerCase();
+  const lowerPath = path.toLowerCase();
+  if (lowerPath.startsWith(`${canonicalBucket}/`) || lowerPath.startsWith(`${canonicalBucket}\\`)) {
+    return { valid: false, error: 'Storage path must not include the bucket name prefix.' };
   }
 
   return { valid: true };
@@ -316,9 +387,19 @@ export async function uploadFile(
   params: StorageUploadParams,
   client?: SupabaseClient | any
 ): Promise<StorageUploadResult> {
-  const bucket = params.bucket || getStorageBucketName();
-  const pathCheck = validateStoragePath(params.path);
+  const bucketCheck = validateBucketName(params.bucket);
+  if (!bucketCheck.valid) {
+    return {
+      success: false,
+      path: null,
+      bucket: params.bucket || '',
+      publicUrl: null,
+      error: bucketCheck.error || 'Invalid bucket name.',
+    };
+  }
+  const bucket = bucketCheck.bucket;
 
+  const pathCheck = validateStoragePath(params.path);
   if (!pathCheck.valid) {
     return {
       success: false,
@@ -382,7 +463,7 @@ export async function uploadFile(
  * Storage Abstraction: Deletes a file from Supabase Storage.
  * 
  * Safety:
- * - Validates target path.
+ * - Validates target bucket and path.
  * - Only deletes the explicitly requested file path.
  * - Never deletes arbitrary bucket paths or wildcards.
  */
@@ -390,9 +471,18 @@ export async function deleteFile(
   params: StorageDeleteParams,
   client?: SupabaseClient | any
 ): Promise<StorageDeleteResult> {
-  const bucket = params.bucket || getStorageBucketName();
-  const pathCheck = validateStoragePath(params.path);
+  const bucketCheck = validateBucketName(params.bucket);
+  if (!bucketCheck.valid) {
+    return {
+      success: false,
+      path: params.path,
+      bucket: params.bucket || '',
+      error: bucketCheck.error || 'Invalid bucket name.',
+    };
+  }
+  const bucket = bucketCheck.bucket;
 
+  const pathCheck = validateStoragePath(params.path);
   if (!pathCheck.valid) {
     return {
       success: false,
@@ -503,4 +593,405 @@ export function getFileUrl(
     url: data?.publicUrl || null,
     path: storagePath,
   };
+}
+
+// ==============================================================================
+// STEP 12: SECURE TEMPORARY SIGNED URLS & ACCESS CONTROL LAYER
+// ==============================================================================
+
+/**
+ * Extracts a normalized relative storage path from a content item's file_url.
+ * Strips hostnames, query strings, and bucket name prefixes.
+ */
+export function extractStoragePathFromContent(content: { file_url?: string | null; [key: string]: any }): string | null {
+  if (!content || !content.file_url || typeof content.file_url !== 'string') {
+    return null;
+  }
+
+  let raw = content.file_url.trim();
+  if (raw.length === 0) {
+    return null;
+  }
+
+  // Remove query parameters
+  raw = raw.split('?')[0];
+
+  const canonicalBucket = getStorageBucketName();
+
+  // If path contains /<bucket-name>/, take everything after it
+  const bucketSubstr = `/${canonicalBucket}/`;
+  const bucketIndex = raw.indexOf(bucketSubstr);
+  if (bucketIndex !== -1) {
+    raw = raw.substring(bucketIndex + bucketSubstr.length);
+  } else if (raw.toLowerCase().startsWith(`${canonicalBucket.toLowerCase()}/`)) {
+    raw = raw.substring(canonicalBucket.length + 1);
+  }
+
+  // Remove leading slashes
+  raw = raw.replace(/^[/\\]+/, '');
+
+  return raw.length > 0 ? raw : null;
+}
+
+/**
+ * Secure Temporary Signed URL Generation.
+ * 
+ * Architecture Principle:
+ * Because the bucket content-files is PRIVATE:
+ * - Public URLs are NOT generated or used.
+ * - Generates temporary time-limited signed URLs via Supabase Storage.
+ * - Validates the target path and bucket against traversal and injection attacks.
+ * - Enforces configurable expiry with safe bounds [60s, 86400s].
+ */
+export async function createSignedFileUrl(
+  params: SignedUrlParams,
+  client?: SupabaseClient | any
+): Promise<SignedUrlResult> {
+  // 1. Bucket Validation (rejects arbitrary buckets)
+  const bucketCheck = validateBucketName(params.bucket);
+  if (!bucketCheck.valid) {
+    return {
+      success: false,
+      signedUrl: null,
+      path: params.path,
+      bucket: params.bucket || '',
+      expiresIn: 0,
+      expiresAt: null,
+      errorCode: 'INVALID_BUCKET',
+      error: bucketCheck.error || 'Invalid bucket requested.',
+    };
+  }
+  const bucket = bucketCheck.bucket;
+
+  // 2. Path Validation (rejects traversal, drive letters, control characters)
+  const pathCheck = validateStoragePath(params.path);
+  if (!pathCheck.valid) {
+    return {
+      success: false,
+      signedUrl: null,
+      path: params.path,
+      bucket,
+      expiresIn: 0,
+      expiresAt: null,
+      errorCode: 'INVALID_STORAGE_PATH',
+      error: pathCheck.error || 'Invalid storage path.',
+    };
+  }
+
+  // 3. Expiry Bounds
+  const requestedExpires = params.expiresIn ?? DEFAULT_SIGNED_URL_EXPIRES_IN_SECONDS;
+  const expiresIn = Math.min(
+    Math.max(requestedExpires, MIN_SIGNED_URL_EXPIRES_IN_SECONDS),
+    MAX_SIGNED_URL_EXPIRES_IN_SECONDS
+  );
+
+  // 4. Resolve Client
+  const resolvedClient = client || getSupabaseClient();
+  if (!resolvedClient) {
+    return {
+      success: false,
+      signedUrl: null,
+      path: params.path,
+      bucket,
+      expiresIn,
+      expiresAt: null,
+      errorCode: 'STORAGE_OPERATION_FAILED',
+      error: 'Supabase storage client is unavailable.',
+    };
+  }
+
+  try {
+    const { data, error } = await resolvedClient.storage
+      .from(bucket)
+      .createSignedUrl(params.path, expiresIn);
+
+    if (error || !data?.signedUrl) {
+      return {
+        success: false,
+        signedUrl: null,
+        path: params.path,
+        bucket,
+        expiresIn,
+        expiresAt: null,
+        errorCode: 'SIGNED_URL_GENERATION_FAILED',
+        error: error ? `Failed to generate signed URL: ${error.message}` : 'No signed URL returned.',
+      };
+    }
+
+    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+
+    return {
+      success: true,
+      signedUrl: data.signedUrl,
+      path: params.path,
+      bucket,
+      expiresIn,
+      expiresAt,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      signedUrl: null,
+      path: params.path,
+      bucket,
+      expiresIn,
+      expiresAt: null,
+      errorCode: 'STORAGE_OPERATION_FAILED',
+      error: 'An unexpected error occurred during signed URL generation.',
+    };
+  }
+}
+
+/**
+ * Access-Control Abstraction for Content File Access.
+ * 
+ * Enforces Platform Security Model:
+ * 
+ * 1. PUBLIC FILE:
+ *    status = 'published' AND visibility = 'public'
+ *    Allowed for unauthenticated public requests.
+ * 
+ * 2. REGISTERED FILE:
+ *    status = 'published' AND visibility = 'registered'
+ *    Requires an authenticated user context (user !== null).
+ * 
+ * 3. PREMIUM FILE:
+ *    status = 'published' AND visibility = 'premium'
+ *    Requires an authenticated user who passes the premium authorization check.
+ *    (Clean interface boundary without inventing fake subscription/payment systems).
+ * 
+ * 4. DRAFT CONTENT:
+ *    Must never be publicly accessible (returns 403 DRAFT_PROTECTED).
+ * 
+ * 5. ARCHIVED CONTENT:
+ *    Must not be publicly accessible (returns 403 ARCHIVED_PROTECTED).
+ */
+export function evaluateContentFileAccess(
+  content: {
+    status: ContentStatus | string;
+    visibility: ContentVisibility | string;
+    file_url?: string | null;
+    [key: string]: any;
+  },
+  user?: AccessUser | null
+): StorageAccessDecision {
+  // 1. Status Evaluation
+  if (content.status === 'draft') {
+    return {
+      allowed: false,
+      statusCode: 403,
+      errorCode: 'DRAFT_PROTECTED',
+      reason: 'Access denied: Draft content files are protected and cannot be accessed.',
+    };
+  }
+
+  if (content.status === 'archived') {
+    return {
+      allowed: false,
+      statusCode: 403,
+      errorCode: 'ARCHIVED_PROTECTED',
+      reason: 'Access denied: Archived content files are not publicly accessible.',
+    };
+  }
+
+  if (content.status !== 'published') {
+    return {
+      allowed: false,
+      statusCode: 403,
+      errorCode: 'FORBIDDEN',
+      reason: `Access denied: Content is in "${content.status}" status. Only published content files can be accessed.`,
+    };
+  }
+
+  // 2. Visibility Evaluation (for published content)
+  if (content.visibility === 'public') {
+    return {
+      allowed: true,
+      statusCode: 200,
+    };
+  }
+
+  if (content.visibility === 'registered') {
+    if (!user || !user.id) {
+      return {
+        allowed: false,
+        statusCode: 401,
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required: This file is restricted to registered members.',
+      };
+    }
+
+    return {
+      allowed: true,
+      statusCode: 200,
+    };
+  }
+
+  if (content.visibility === 'premium') {
+    if (!user || !user.id) {
+      return {
+        allowed: false,
+        statusCode: 401,
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required: This file requires a registered account with premium authorization.',
+      };
+    }
+
+    // Clean authorization boundary: checks whether user is authorized for premium
+    if (user.hasPremiumAccess !== true) {
+      return {
+        allowed: false,
+        statusCode: 403,
+        errorCode: 'FORBIDDEN',
+        reason: 'Forbidden: Premium authorization required to access this resource.',
+      };
+    }
+
+    return {
+      allowed: true,
+      statusCode: 200,
+    };
+  }
+
+  return {
+    allowed: false,
+    statusCode: 403,
+    errorCode: 'FORBIDDEN',
+    reason: `Access denied: Unsupported visibility level "${content.visibility}".`,
+  };
+}
+
+/**
+ * Service Layer: Resolves a content item by ID or slug, verifies content status & visibility,
+ * validates the associated file storage path, and generates a temporary signed URL.
+ * 
+ * Safety:
+ * - Never returns public URLs for the private bucket.
+ * - Enforces content publication and visibility requirements.
+ * - Verifies that any requested storage path strictly matches the content's associated file.
+ * - Never leaks internal database errors or secrets.
+ */
+export async function getSecureContentFileUrl(options: {
+  identifier: string; // Content ID or slug
+  requestedPath?: string; // Optional path supplied by caller to verify against content
+  user?: AccessUser | null;
+  expiresIn?: number;
+  client?: SupabaseClient | any;
+}): Promise<SecureContentFileResponse> {
+  const { identifier, requestedPath, user, expiresIn, client } = options;
+
+  if (!identifier || typeof identifier !== 'string' || identifier.trim().length === 0) {
+    return {
+      success: false,
+      errorCode: 'CONTENT_NOT_FOUND',
+      error: 'Content identifier must be a non-empty string.',
+    };
+  }
+
+  const cleanIdentifier = identifier.trim();
+  const resolvedClient = client || getSupabaseClient();
+
+  if (!resolvedClient) {
+    return {
+      success: false,
+      errorCode: 'STORAGE_OPERATION_FAILED',
+      error: 'Database and storage service is unavailable.',
+    };
+  }
+
+  try {
+    // 1. Look up content item by ID or Slug
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanIdentifier);
+    let query = resolvedClient.from('content').select('*');
+
+    if (isUuid) {
+      query = query.eq('id', cleanIdentifier);
+    } else {
+      query = query.eq('slug', cleanIdentifier);
+    }
+
+    const { data: content, error: queryError } = await query.maybeSingle();
+
+    if (queryError) {
+      return {
+        success: false,
+        errorCode: 'STORAGE_OPERATION_FAILED',
+        error: 'Failed to query content record.',
+      };
+    }
+
+    if (!content) {
+      return {
+        success: false,
+        errorCode: 'CONTENT_NOT_FOUND',
+        error: `Content item "${cleanIdentifier}" was not found.`,
+      };
+    }
+
+    // 2. Evaluate access permissions based on publication status & visibility
+    const decision = evaluateContentFileAccess(content, user);
+    if (!decision.allowed) {
+      return {
+        success: false,
+        errorCode: decision.errorCode,
+        error: decision.reason,
+      };
+    }
+
+    // 3. Extract and verify storage path from content record
+    const storagePath = extractStoragePathFromContent(content);
+    if (!storagePath) {
+      return {
+        success: false,
+        errorCode: 'FILE_NOT_FOUND',
+        error: `No file resource is attached to content item "${cleanIdentifier}".`,
+      };
+    }
+
+    // 4. Verify requestedPath if provided by client (anti-tampering check)
+    if (requestedPath && typeof requestedPath === 'string') {
+      const cleanRequested = requestedPath.trim();
+      if (cleanRequested !== storagePath) {
+        return {
+          success: false,
+          errorCode: 'INVALID_STORAGE_PATH',
+          error: 'The requested storage path does not match the file associated with this content.',
+        };
+      }
+    }
+
+    // 5. Generate secure temporary signed URL
+    const signedResult = await createSignedFileUrl(
+      {
+        path: storagePath,
+        expiresIn,
+      },
+      resolvedClient
+    );
+
+    if (!signedResult.success || !signedResult.signedUrl) {
+      return {
+        success: false,
+        errorCode: signedResult.errorCode || 'SIGNED_URL_GENERATION_FAILED',
+        error: signedResult.error || 'Failed to generate temporary signed URL.',
+      };
+    }
+
+    // 6. Return only non-sensitive metadata and signed URL
+    const fileName = sanitizeFileName(storagePath.split('/').pop() || 'file');
+
+    return {
+      success: true,
+      signedUrl: signedResult.signedUrl,
+      expiresIn: signedResult.expiresIn,
+      expiresAt: signedResult.expiresAt,
+      fileName,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      errorCode: 'STORAGE_OPERATION_FAILED',
+      error: 'An unexpected error occurred while resolving the content file URL.',
+    };
+  }
 }

@@ -130,3 +130,94 @@ export interface StorageFileUrlResult {
   path: string;
   reason?: string;
 }
+
+// ==============================================================================
+// STEP 12: STORAGE SECURITY & ACCESS LAYER TYPES
+// ==============================================================================
+
+/**
+ * Storage Access Error Codes for clear, typed error handling.
+ */
+export type StorageAccessErrorCode =
+  | 'CONTENT_NOT_FOUND'
+  | 'FILE_NOT_FOUND'
+  | 'INVALID_STORAGE_PATH'
+  | 'INVALID_BUCKET'
+  | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
+  | 'DRAFT_PROTECTED'
+  | 'ARCHIVED_PROTECTED'
+  | 'SIGNED_URL_GENERATION_FAILED'
+  | 'STORAGE_OPERATION_FAILED';
+
+/**
+ * Abstract user representation for file access authorization.
+ * Provides a clean boundary for future authentication & authorization systems
+ * without inventing unrequested payment/subscription logic.
+ */
+export interface AccessUser {
+  id: string;
+  email?: string;
+  role?: string;
+  isRegistered?: boolean;
+  hasPremiumAccess?: boolean;
+}
+
+/**
+ * Authorization Decision returned by evaluateContentFileAccess().
+ */
+export interface StorageAccessDecision {
+  allowed: boolean;
+  statusCode: number; // 200, 401, 403, 404, etc.
+  errorCode?: StorageAccessErrorCode;
+  reason?: string;
+}
+
+/**
+ * Parameters for generating a secure temporary signed URL.
+ */
+export interface SignedUrlParams {
+  path: string;
+  bucket?: string;
+  expiresIn?: number; // In seconds (default: 900s / 15m)
+}
+
+/**
+ * Result of generating a secure temporary signed URL.
+ */
+export interface SignedUrlResult {
+  success: boolean;
+  signedUrl: string | null;
+  path: string;
+  bucket: string;
+  expiresIn: number;
+  expiresAt: string | null; // ISO 8601 timestamp
+  errorCode?: StorageAccessErrorCode;
+  error?: string;
+}
+
+/**
+ * Request options for secure content file URL generation.
+ */
+export interface SecureContentFileRequest {
+  identifier: string; // Content ID or Content Slug
+  requestedPath?: string; // Optional path supplied by caller to be validated against content
+  user?: AccessUser | null; // Authenticated user context (if present)
+  expiresIn?: number; // Requested expiry in seconds
+}
+
+/**
+ * Response structure for secure content file URL endpoint.
+ * Contains only non-sensitive metadata and temporary signed URL.
+ */
+export interface SecureContentFileResponse {
+  success: boolean;
+  signedUrl?: string | null;
+  expiresIn?: number;
+  expiresAt?: string | null;
+  fileName?: string;
+  fileSize?: number;
+  fileType?: string;
+  errorCode?: StorageAccessErrorCode;
+  error?: string;
+}

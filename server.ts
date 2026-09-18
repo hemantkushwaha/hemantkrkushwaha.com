@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { ingestRouter } from './src/server/routes/ingestRoutes';
+import storageRouter from './src/server/routes/storageRoutes';
 
 async function startServer() {
   const app = express();
@@ -44,6 +45,10 @@ async function startServer() {
 
   // Step 10: Secure Server-Side Content Ingestion API
   app.use('/api/ingest', ingestRouter);
+
+  // Step 12: Secure Storage & Signed URL API
+  app.use('/api/storage', storageRouter);
+  app.use('/api/content', storageRouter);
 
   // Vite middleware for development or static serving for production
   if (process.env.NODE_ENV !== 'production') {

@@ -9,6 +9,7 @@
  */
 
 import { authenticateIngestionRequest } from '../../src/server/middleware/authMiddleware';
+import { parseMultipartIngestion } from '../../src/server/middleware/multipartMiddleware';
 import { handleContentIngestion } from '../../src/server/controllers/ingestController';
 
 export default async function handler(req: any, res: any) {
@@ -22,7 +23,7 @@ export default async function handler(req: any, res: any) {
   }
 
   // Ensure JSON body is parsed if received as string
-  if (typeof req.body === 'string') {
+  if (typeof req.body === 'string' && !req.headers?.['content-type']?.includes('multipart/form-data')) {
     try {
       req.body = JSON.parse(req.body);
     } catch {
@@ -33,8 +34,10 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  // Execute authentication middleware followed by ingestion controller
+  // Execute authentication middleware followed by multipart parsing and ingestion controller
   return authenticateIngestionRequest(req, res, () => {
-    return handleContentIngestion(req, res);
+    return parseMultipartIngestion(req, res, () => {
+      return handleContentIngestion(req, res);
+    });
   });
 }

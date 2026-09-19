@@ -10,9 +10,10 @@
 
 import { Router } from 'express';
 import { authenticateIngestionRequest } from '../middleware/authMiddleware';
+import { parseMultipartIngestion } from '../middleware/multipartMiddleware';
 import { handleContentIngestion } from '../controllers/ingestController';
 
 export const ingestRouter = Router();
 
-// Secure server-to-server ingestion endpoint
-ingestRouter.post('/content', authenticateIngestionRequest, handleContentIngestion);
+// Secure server-to-server ingestion endpoint supporting manifest-only and manifest + file
+ingestRouter.post('/content', authenticateIngestionRequest, parseMultipartIngestion, handleContentIngestion);

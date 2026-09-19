@@ -285,6 +285,24 @@ export function validateFileMetadata(metadata: unknown): FileValidationResult {
     };
   }
 
+  // Reject explicit path traversal sequences, slashes, or null bytes in file_name
+  if (
+    rawFileName.includes('..') ||
+    rawFileName.includes('/') ||
+    rawFileName.includes('\\') ||
+    rawFileName.includes('\0') ||
+    rawFileName.toLowerCase().includes('%2e%2e') ||
+    rawFileName.toLowerCase().includes('%2f')
+  ) {
+    errors.push('Field "file_name" must not contain path traversal characters (".."), path separators ("/", "\\"), or null bytes.');
+    return {
+      valid: false,
+      errors,
+      detectedExtension: null,
+      sanitizedFileName: null,
+    };
+  }
+
   const sanitized = sanitizeFileName(rawFileName);
   if (sanitized.length === 0) {
     errors.push('Field "file_name" contains no valid characters.');
@@ -298,8 +316,8 @@ export function validateFileMetadata(metadata: unknown): FileValidationResult {
 
   // 2. Extension Extraction & Validation
   const lastDot = sanitized.lastIndexOf('.');
-  if (lastDot === -1 || lastDot === sanitized.length - 1) {
-    errors.push(`File "${rawFileName}" lacks a valid file extension.`);
+  if (lastDot === -1 || lastDot === sanitized.length - 1 || lastDot === 0) {
+    errors.push(`File "${rawFileName}" lacks a valid file extension or base name.`);
     return {
       valid: false,
       errors,
@@ -332,7 +350,7 @@ export function validateFileMetadata(metadata: unknown): FileValidationResult {
       const allowedMimes = SUPPORTED_MIME_TYPES[detectedExtension] || [];
       if (!allowedMimes.includes(mime)) {
         errors.push(
-          `Invalid MIME type "${raw.file_type}" for file extension ".${detectedExtension}". Expected one of: ${allowedMimes.join(', ')}.`
+          `Invalid MIME type "${raw.file_type}" for file extension ".${detectedExtension}" (MIME mismatch). Expected one of: ${allowedMimes.join(', ')}.`
         );
       }
     }

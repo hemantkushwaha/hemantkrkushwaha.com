@@ -54,7 +54,7 @@ export interface IngestionOptions {
    * Orchestrated through uploadFile before database record creation.
    */
   fileResource?: {
-    data: Buffer | Uint8Array | Blob;
+    data: Buffer | Uint8Array | Blob | string;
     fileName: string;
     fileType?: string; // MIME type e.g. 'application/pdf'
     fileSize?: number; // Size in bytes
@@ -73,12 +73,16 @@ export interface IngestionResult {
   success: boolean;
   content: ContentItem | null;
   slug: string | null;
+  title?: string | null;
   topic: string | null;
   tagsCreated: number;
   tagsAssociated: number;
   relationshipsCreated: number;
   fileUploaded?: boolean;
   filePath?: string | null;
+  fileName?: string | null;
+  fileType?: string | null;
+  fileSize?: number | null;
   fileCleanedUp?: boolean;
   warnings?: string[];
   errors: string[];
@@ -172,11 +176,92 @@ export async function ingestContent(
   }
 
   // 1b. Validation of File Resource (if provided in options)
+  let normalizedData: Buffer | Uint8Array | Blob | null = null;
+  let fileDataSize = 0;
+  let sanitizedFileName: string | null = null;
+  let detectedExtension: string | null = null;
+
   if (options.fileResource) {
+    const rawData = options.fileResource.data;
+    if (!rawData) {
+      return {
+        success: false,
+        content: null,
+        slug: null,
+        title: (rawManifest as any)?.title || null,
+        topic: null,
+        tagsCreated: 0,
+        tagsAssociated: 0,
+        relationshipsCreated: 0,
+        fileUploaded: false,
+        errors: ['Missing file data: Uploaded file contains no binary or base64 data.'],
+      };
+    }
+
+    if (typeof rawData === 'string') {
+      try {
+        const cleanBase64 = rawData.includes(',') ? rawData.split(',')[1] : rawData;
+        normalizedData = Buffer.from(cleanBase64, 'base64');
+        fileDataSize = normalizedData.length;
+      } catch {
+        return {
+          success: false,
+          content: null,
+          slug: null,
+          title: (rawManifest as any)?.title || null,
+          topic: null,
+          tagsCreated: 0,
+          tagsAssociated: 0,
+          relationshipsCreated: 0,
+          fileUploaded: false,
+          errors: ['Malformed file data: Failed to decode base64 file data.'],
+        };
+      }
+    } else if (Buffer.isBuffer(rawData)) {
+      normalizedData = rawData;
+      fileDataSize = rawData.length;
+    } else if (rawData instanceof Uint8Array) {
+      normalizedData = rawData;
+      fileDataSize = rawData.byteLength;
+    } else if (typeof Blob !== 'undefined' && rawData instanceof Blob) {
+      normalizedData = rawData;
+      fileDataSize = rawData.size;
+    } else {
+      return {
+        success: false,
+        content: null,
+        slug: null,
+        title: (rawManifest as any)?.title || null,
+        topic: null,
+        tagsCreated: 0,
+        tagsAssociated: 0,
+        relationshipsCreated: 0,
+        fileUploaded: false,
+        errors: ['Malformed file data: File data must be a Buffer, Uint8Array, Blob, or base64 string.'],
+      };
+    }
+
+    if (fileDataSize === 0) {
+      return {
+        success: false,
+        content: null,
+        slug: null,
+        title: (rawManifest as any)?.title || null,
+        topic: null,
+        tagsCreated: 0,
+        tagsAssociated: 0,
+        relationshipsCreated: 0,
+        fileUploaded: false,
+        errors: ['Malformed file data: Uploaded file is empty (0 bytes).'],
+      };
+    }
+
+    const effectiveSize = options.fileResource.fileSize ?? fileDataSize;
+
     const fileValidation = validateFileMetadata({
       file_name: options.fileResource.fileName,
       file_type: options.fileResource.fileType,
-      file_size: options.fileResource.fileSize,
+      file_size: effectiveSize,
       file_path: options.fileResource.filePath,
     });
 
@@ -185,6 +270,7 @@ export async function ingestContent(
         success: false,
         content: null,
         slug: null,
+        title: (rawManifest as any)?.title || null,
         topic: null,
         tagsCreated: 0,
         tagsAssociated: 0,
@@ -193,6 +279,9 @@ export async function ingestContent(
         errors: fileValidation.errors,
       };
     }
+
+    sanitizedFileName = fileValidation.sanitizedFileName;
+    detectedExtension = fileValidation.detectedExtension;
   }
 
   // 2. Normalization
@@ -241,7 +330,7 @@ export async function ingestContent(
           category: normalized.category,
           topic: normalized.topic,
           contentType: normalized.content_type,
-          fileName: options.fileResource.fileName,
+          fileName: sanitizedFileName || options.fileResource.fileName,
         })
       : null;
 
@@ -249,12 +338,16 @@ export async function ingestContent(
       success: true,
       content: null,
       slug,
+      title: normalized.title,
       topic: normalized.topic,
       tagsCreated: 0,
       tagsAssociated: normalized.tags.length,
       relationshipsCreated: normalized.related_content.length,
-      fileUploaded: false,
+      fileUploaded: !!options.fileResource,
       filePath: dryRunPath,
+      fileName: options.fileResource ? (sanitizedFileName || options.fileResource.fileName) : undefined,
+      fileType: options.fileResource ? (options.fileResource.fileType || (detectedExtension ? `application/${detectedExtension}` : undefined)) : undefined,
+      fileSize: options.fileResource ? (options.fileResource.fileSize ?? fileDataSize) : undefined,
       warnings: ['Dry run mode: validation and normalization succeeded without database writes.'],
       errors: [],
     };
@@ -274,6 +367,7 @@ export async function ingestContent(
         success: false,
         content: null,
         slug,
+        title: normalized.title,
         topic: normalized.topic,
         tagsCreated: 0,
         tagsAssociated: 0,
@@ -288,6 +382,7 @@ export async function ingestContent(
         success: false,
         content: null,
         slug,
+        title: normalized.title,
         topic: normalized.topic,
         tagsCreated: 0,
         tagsAssociated: 0,
@@ -309,15 +404,15 @@ export async function ingestContent(
           category: normalized.category,
           topic: normalized.topic,
           contentType: normalized.content_type,
-          fileName: options.fileResource.fileName,
+          fileName: sanitizedFileName || options.fileResource.fileName,
         });
 
       const uploadFn = options.storageService?.uploadFile || uploadFile;
       const uploadResult = await uploadFn(
         {
           path: targetStoragePath,
-          data: options.fileResource.data,
-          contentType: options.fileResource.fileType || 'application/octet-stream',
+          data: (normalizedData || options.fileResource.data) as any,
+          contentType: options.fileResource.fileType || (detectedExtension ? `application/${detectedExtension}` : 'application/octet-stream'),
         },
         client
       );
@@ -328,6 +423,7 @@ export async function ingestContent(
           success: false,
           content: null,
           slug,
+          title: normalized.title,
           topic: normalized.topic,
           tagsCreated: 0,
           tagsAssociated: 0,
@@ -340,7 +436,7 @@ export async function ingestContent(
       }
 
       uploadedStoragePath = uploadResult.path;
-      resolvedFileUrl = uploadResult.publicUrl || uploadResult.path;
+      resolvedFileUrl = uploadResult.path;
     }
 
     // 8. Insert Content Record
@@ -371,12 +467,38 @@ export async function ingestContent(
         ? ' Warning: Automatic cleanup of the uploaded file could not be confirmed.'
         : '';
 
+      // Catch duplicate slug conflict during insertion (e.g. concurrent race condition)
+      const isDuplicateInsert =
+        insertError &&
+        (insertError.code === '23505' ||
+          insertError.message?.toLowerCase().includes('duplicate') ||
+          insertError.message?.toLowerCase().includes('unique constraint'));
+
+      if (isDuplicateInsert) {
+        return {
+          success: false,
+          content: null,
+          slug,
+          title: normalized.title,
+          topic: normalized.topic,
+          tagsCreated: 0,
+          tagsAssociated: 0,
+          relationshipsCreated: 0,
+          fileUploaded: !!uploadedStoragePath,
+          fileCleanedUp,
+          errors: [
+            `Duplicate content error: A publication with slug "${slug}" already exists.${cleanupNote}`,
+          ],
+        };
+      }
+
       // Catch RLS write permission error cleanly
       if (insertError && (insertError.code === '42501' || insertError.message.includes('row-level security'))) {
         return {
           success: false,
           content: null,
           slug,
+          title: normalized.title,
           topic: normalized.topic,
           tagsCreated: 0,
           tagsAssociated: 0,
@@ -393,6 +515,7 @@ export async function ingestContent(
         success: false,
         content: null,
         slug,
+        title: normalized.title,
         topic: normalized.topic,
         tagsCreated: 0,
         tagsAssociated: 0,
@@ -523,12 +646,16 @@ export async function ingestContent(
       success: true,
       content: insertedContent as ContentItem,
       slug,
+      title: normalized.title,
       topic: normalized.topic,
       tagsCreated: tagsCreatedCount,
       tagsAssociated: tagsAssociatedCount,
       relationshipsCreated: relationshipsCreatedCount,
       fileUploaded: !!uploadedStoragePath,
       filePath: uploadedStoragePath,
+      fileName: options.fileResource ? (sanitizedFileName || options.fileResource.fileName) : undefined,
+      fileType: options.fileResource ? (options.fileResource.fileType || (detectedExtension ? `application/${detectedExtension}` : undefined)) : undefined,
+      fileSize: options.fileResource ? (options.fileResource.fileSize ?? fileDataSize) : undefined,
       warnings: warnings.length > 0 ? warnings : undefined,
       errors: errors.length > 0 ? errors : [],
     };
@@ -537,10 +664,12 @@ export async function ingestContent(
       success: false,
       content: null,
       slug,
-      topic: normalized.topic,
+      title: (rawManifest as any)?.title || null,
+      topic: null,
       tagsCreated: 0,
       tagsAssociated: 0,
       relationshipsCreated: 0,
+      fileUploaded: false,
       errors: [`Unexpected ingestion error: ${unexpectedError?.message || String(unexpectedError)}`],
     };
   }

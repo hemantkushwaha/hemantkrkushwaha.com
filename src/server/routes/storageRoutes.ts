@@ -10,7 +10,7 @@
  */
 
 import { Router } from 'express';
-import { handleSecureFileUrlRequest } from '../controllers/storageController';
+import { handleSecureFileUrlRequest } from '../controllers/storageController.js';
 
 const router = Router();
 

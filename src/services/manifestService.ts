@@ -22,10 +22,10 @@ import {
   MANIFEST_SECTIONS,
   MANIFEST_CONTENT_TYPES,
   ManifestRelatedItem,
-} from '../types/manifest';
-import { validateFileMetadata } from './storageService';
+} from '../types/manifest.js';
+import { validateFileMetadata } from './storageService.js';
 
-export * from '../types/manifest';
+export * from '../types/manifest.js';
 
 /**
  * Generate a clean, URL-safe slug from any string

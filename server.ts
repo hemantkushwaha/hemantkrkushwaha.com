@@ -2,8 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { ingestRouter } from './src/server/routes/ingestRoutes';
-import storageRouter from './src/server/routes/storageRoutes';
+import { ingestRouter } from './src/server/routes/ingestRoutes.js';
+import storageRouter from './src/server/routes/storageRoutes.js';
 
 async function startServer() {
   const app = express();

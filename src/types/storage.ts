@@ -5,7 +5,7 @@
  * Architecture: Step 11 — File Ingestion Foundation
  */
 
-import { ContentStatus, ContentVisibility } from './content';
+import { ContentStatus, ContentVisibility } from './content.js';
 
 /**
  * Standard supported file extensions across the knowledge platform.

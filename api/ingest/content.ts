@@ -8,9 +8,9 @@
  * Reuses the exact same controller, authentication middleware, and ingestion service.
  */
 
-import { authenticateIngestionRequest } from '../../src/server/middleware/authMiddleware';
-import { parseMultipartIngestion } from '../../src/server/middleware/multipartMiddleware';
-import { handleContentIngestion } from '../../src/server/controllers/ingestController';
+import { authenticateIngestionRequest } from '../../src/server/middleware/authMiddleware.js';
+import { parseMultipartIngestion } from '../../src/server/middleware/multipartMiddleware.js';
+import { handleContentIngestion } from '../../src/server/controllers/ingestController.js';
 
 export default async function handler(req: any, res: any) {
   // Enforce HTTP POST

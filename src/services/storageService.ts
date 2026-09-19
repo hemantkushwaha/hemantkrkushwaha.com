@@ -13,8 +13,8 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { getSupabaseClient } from '../lib/supabase';
-import { ContentStatus, ContentVisibility } from '../types/content';
+import { getSupabaseClient } from '../lib/supabase.js';
+import { ContentStatus, ContentVisibility } from '../types/content.js';
 import {
   FileMetadata,
   FileValidationResult,
@@ -32,9 +32,9 @@ import {
   AccessUser,
   StorageAccessDecision,
   SecureContentFileResponse,
-} from '../types/storage';
+} from '../types/storage.js';
 
-export * from '../types/storage';
+export * from '../types/storage.js';
 
 /**
  * Default storage bucket name.

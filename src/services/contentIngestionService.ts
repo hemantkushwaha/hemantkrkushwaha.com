@@ -18,15 +18,15 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { getSupabaseClient } from '../lib/supabase';
-import { ContentItem, ContentStatus, ContentVisibility } from '../types/content';
+import { getSupabaseClient } from '../lib/supabase.js';
+import { ContentItem, ContentStatus, ContentVisibility } from '../types/content.js';
 import {
   ContentManifest,
   NormalizedContentManifest,
   validateContentManifest,
   normalizeContentManifest,
   ManifestRelatedItem,
-} from './manifestService';
+} from './manifestService.js';
 import {
   validateFileMetadata,
   uploadFile,
@@ -36,7 +36,7 @@ import {
   StorageUploadResult,
   StorageDeleteParams,
   StorageDeleteResult,
-} from './storageService';
+} from './storageService.js';
 
 export interface IngestionOptions {
   /**

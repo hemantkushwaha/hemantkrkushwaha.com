@@ -14,7 +14,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { getMaxFileSizeBytes } from '../../services/storageService';
+import { getMaxFileSizeBytes } from '../../services/storageService.js';
 
 export interface IngestFileResource {
   fileName: string;

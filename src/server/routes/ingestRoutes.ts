@@ -9,9 +9,9 @@
  */
 
 import { Router } from 'express';
-import { authenticateIngestionRequest } from '../middleware/authMiddleware';
-import { parseMultipartIngestion } from '../middleware/multipartMiddleware';
-import { handleContentIngestion } from '../controllers/ingestController';
+import { authenticateIngestionRequest } from '../middleware/authMiddleware.js';
+import { parseMultipartIngestion } from '../middleware/multipartMiddleware.js';
+import { handleContentIngestion } from '../controllers/ingestController.js';
 
 export const ingestRouter = Router();
 

@@ -1,4 +1,4 @@
-import { SectionId, ContentStatus, ContentVisibility } from './content';
+import { SectionId, ContentStatus, ContentVisibility } from './content.js';
 
 /**
  * Standard Sections supported on the platform

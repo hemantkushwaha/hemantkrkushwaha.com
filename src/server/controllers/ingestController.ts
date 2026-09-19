@@ -15,10 +15,10 @@
  */
 
 import { Request, Response } from 'express';
-import { ingestContent } from '../../services/contentIngestionService';
-import { validateContentManifest } from '../../services/manifestService';
-import { getServerSupabaseClient } from '../lib/supabaseServer';
-import { IngestionRequest } from '../middleware/multipartMiddleware';
+import { ingestContent } from '../../services/contentIngestionService.js';
+import { validateContentManifest } from '../../services/manifestService.js';
+import { getServerSupabaseClient } from '../lib/supabaseServer.js';
+import { IngestionRequest } from '../middleware/multipartMiddleware.js';
 
 export async function handleContentIngestion(req: Request, res: Response): Promise<void> {
   const ingReq = req as IngestionRequest;

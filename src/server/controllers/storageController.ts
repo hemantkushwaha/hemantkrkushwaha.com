@@ -13,9 +13,9 @@
  */
 
 import { Request, Response } from 'express';
-import { getSecureContentFileUrl } from '../../services/storageService';
-import { AccessUser, StorageAccessErrorCode } from '../../types/storage';
-import { getServerSupabaseClient } from '../lib/supabaseServer';
+import { getSecureContentFileUrl } from '../../services/storageService.js';
+import { AccessUser, StorageAccessErrorCode } from '../../types/storage.js';
+import { getServerSupabaseClient } from '../lib/supabaseServer.js';
 
 /**
  * Extracts authenticated user context from request headers.

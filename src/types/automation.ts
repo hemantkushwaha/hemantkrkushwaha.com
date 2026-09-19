@@ -52,7 +52,58 @@ export interface AutomationSourceMetadata {
   system: AutomationSourceSystem;
   source_id?: string;
   source_url?: string;
+  source_name?: string;
   generated_at?: string;
+}
+
+/**
+ * Part B & C: Normalized NotebookLM Source Input
+ * 
+ * Represents material exported or generated from NotebookLM accompanied
+ * by caller-provided, non-negotiable taxonomy metadata.
+ * 
+ * Taxonomical fields (section, category, topic, content_type, title)
+ * MUST be explicitly provided by the caller. The adapter will NEVER
+ * infer or alter them.
+ */
+export interface NotebookLMSourceInput {
+  // Required user-controlled taxonomy (Part C)
+  section: ManifestSection | string;
+  category: string;
+  topic: string;
+  content_type: ManifestContentType | string;
+  title: string;
+
+  // Optional taxonomy/presentation
+  subcategory?: string;
+  description?: string;
+
+  // Educational content exported from NotebookLM (Part B)
+  body?: string;
+  content?: string; // Accepted synonym for body
+
+  // Metadata tags
+  tags?: string[];
+
+  // Source provenance tracking (Part B & G)
+  source_id?: string;
+  source_reference?: string; // Accepted synonym for source_id
+  source_name?: string;
+  source_url?: string;
+  generated_at?: string;
+
+  // Access control and visibility (optional)
+  language?: string;
+  visibility?: ContentVisibility;
+  is_featured?: boolean;
+  published?: boolean;
+  external_url?: string;
+
+  // File metadata (Part F - preserved without uploading)
+  file_name?: string;
+  file_type?: string;
+  file_size?: number;
+  file_data?: Buffer | Uint8Array;
 }
 
 /**
@@ -208,9 +259,12 @@ export interface SourceAdapter<TInput = unknown> {
   adapt(input: RawSourceInput<TInput>): Promise<AdaptedManifestResult> | AdaptedManifestResult;
 }
 
-// Typed adapter boundary definitions for future implementations
-export interface NotebookLMAdapter extends SourceAdapter {
+// Typed adapter boundary definitions for source implementations
+export interface NotebookLMAdapter<TInput = any> extends SourceAdapter<TInput> {
   readonly system: 'notebooklm';
+  adapt(
+    input: RawSourceInput<TInput> | any
+  ): Promise<AdaptedManifestResult> | AdaptedManifestResult;
 }
 
 export interface GoogleSlidesAdapter extends SourceAdapter {

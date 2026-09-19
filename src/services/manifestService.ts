@@ -61,6 +61,12 @@ export function validateSourceMetadata(source: unknown): { valid: boolean; error
     }
   }
 
+  if (raw.source_name !== undefined && raw.source_name !== null) {
+    if (typeof raw.source_name !== 'string' || raw.source_name.trim().length === 0) {
+      errors.push('Source metadata field "source_name", when provided, must be a non-empty string.');
+    }
+  }
+
   if (raw.generated_at !== undefined && raw.generated_at !== null) {
     if (typeof raw.generated_at !== 'string' || isNaN(Date.parse(raw.generated_at))) {
       errors.push('Source metadata field "generated_at", when provided, must be a valid ISO-8601 date string.');

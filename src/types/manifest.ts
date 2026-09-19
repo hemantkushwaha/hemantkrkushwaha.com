@@ -68,6 +68,9 @@ export interface ContentManifest {
   title: string;
 
   // Optional fields
+  manifest_version?: string;
+  source?: unknown;
+  body?: string;
   subcategory?: string;
   description?: string;
   tags?: string[];
@@ -83,6 +86,8 @@ export interface ContentManifest {
   related_content?: ManifestRelatedContent[];
   published?: boolean;
 }
+
+export * from './automation.js';
 
 /**
  * Normalized representation of a Content Manifest

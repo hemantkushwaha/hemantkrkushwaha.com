@@ -19,24 +19,132 @@ import { ingestContent } from '../../services/contentIngestionService.js';
 import { validateContentManifest } from '../../services/manifestService.js';
 import { getServerSupabaseClient } from '../lib/supabaseServer.js';
 import { IngestionRequest } from '../middleware/multipartMiddleware.js';
+import { AutomationErrorCode } from '../../types/automation.js';
+
+/**
+ * Request-Level In-Memory Idempotency Cache (Part D)
+ * 
+ * Stores recent responses for external automation retries within the server process.
+ * NOTE: Database schema is NOT modified. This provides request-level idempotency,
+ * while underlying PostgreSQL slug uniqueness prevents duplicate database writes.
+ */
+interface IdempotencyRecord {
+  statusCode: number;
+  body: any;
+  timestamp: number;
+}
+
+const IDEMPOTENCY_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+const MAX_IDEMPOTENCY_ENTRIES = 1000;
+const idempotencyCache = new Map<string, IdempotencyRecord>();
+
+export function getCachedIdempotencyRecord(key: string): IdempotencyRecord | null {
+  const record = idempotencyCache.get(key);
+  if (!record) return null;
+  if (Date.now() - record.timestamp > IDEMPOTENCY_TTL_MS) {
+    idempotencyCache.delete(key);
+    return null;
+  }
+  return record;
+}
+
+export function setCachedIdempotencyRecord(key: string, statusCode: number, body: any): void {
+  if (idempotencyCache.size >= MAX_IDEMPOTENCY_ENTRIES) {
+    const oldestKey = idempotencyCache.keys().next().value;
+    if (oldestKey) idempotencyCache.delete(oldestKey);
+  }
+  idempotencyCache.set(key, {
+    statusCode,
+    body,
+    timestamp: Date.now(),
+  });
+}
+
+/**
+ * Helper to format error responses adhering to Part G while preserving backward compatibility.
+ */
+function sendErrorResponse(
+  req: Request,
+  res: Response,
+  statusCode: number,
+  errorCode: AutomationErrorCode,
+  errorMessage: string,
+  extra: Record<string, unknown> = {}
+): void {
+  const rawManifest = req.body?.manifest || req.body;
+  const isAutomationRequest =
+    req.headers?.['x-api-version'] === '1.0' ||
+    req.headers?.['x-client-type'] === 'automation' ||
+    (rawManifest && typeof rawManifest === 'object' && rawManifest.manifest_version === '1.0');
+
+  if (isAutomationRequest) {
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        code: errorCode,
+        message: errorMessage,
+      },
+      error_code: errorCode,
+      ...extra,
+    });
+  } else {
+    res.status(statusCode).json({
+      success: false,
+      error: errorMessage,
+      error_code: errorCode,
+      error_details: {
+        code: errorCode,
+        message: errorMessage,
+      },
+      ...extra,
+    });
+  }
+}
 
 export async function handleContentIngestion(req: Request, res: Response): Promise<void> {
   const ingReq = req as IngestionRequest;
 
-  // 1. Single-file enforcement check (Step 13 only permits manifest-only or manifest + 1 file)
+  // 1. Check Idempotency-Key header (Part D)
+  const rawIdempotencyKey = req.headers?.['idempotency-key'];
+  const idempotencyKey = typeof rawIdempotencyKey === 'string' ? rawIdempotencyKey.trim() : null;
+
+  if (idempotencyKey) {
+    if (idempotencyKey.length === 0 || idempotencyKey.length > 128) {
+      sendErrorResponse(
+        req,
+        res,
+        400,
+        'MALFORMED_REQUEST',
+        'Bad Request: Idempotency-Key header must be between 1 and 128 characters.'
+      );
+      return;
+    }
+
+    const cached = getCachedIdempotencyRecord(idempotencyKey);
+    if (cached) {
+      res.setHeader('X-Cache-Lookup', 'HIT');
+      res.status(cached.statusCode).json(cached.body);
+      return;
+    }
+  }
+
+  // 2. Single-file enforcement check (Step 13 only permits manifest-only or manifest + 1 file)
   if (
     ingReq.multipleFilesDetected ||
     (Array.isArray(req.body?.files) && req.body.files.length > 1) ||
     (Array.isArray(req.body?.file) && req.body.file.length > 1)
   ) {
-    res.status(400).json({
-      success: false,
-      error: 'Bad Request: Multiple files are not supported in Step 13. Only one file may be uploaded per ingestion request.',
-    });
+    sendErrorResponse(
+      req,
+      res,
+      400,
+      'INVALID_MANIFEST',
+      'Bad Request: Multiple files are not supported in Step 13. Only one file may be uploaded per ingestion request.'
+    );
     return;
   }
 
-  // 2. Extract Manifest and File Resource
+  // 3. Extract Manifest and File Resource
   let rawManifest: any = req.body;
   let fileResource: any = ingReq.fileResource || null;
 
@@ -47,10 +155,13 @@ export async function handleContentIngestion(req: Request, res: Response): Promi
       try {
         rawManifest = JSON.parse(rawManifest);
       } catch {
-        res.status(400).json({
-          success: false,
-          error: 'Bad Request: Field "manifest" contains invalid JSON string.',
-        });
+        sendErrorResponse(
+          req,
+          res,
+          400,
+          'MALFORMED_REQUEST',
+          'Bad Request: Field "manifest" contains invalid JSON string.'
+        );
         return;
       }
     }
@@ -84,60 +195,105 @@ export async function handleContentIngestion(req: Request, res: Response): Promi
     rawManifest = cleanManifest;
   }
 
-  // 3. Request Body Structure Validation
+  // 4. Request Body Structure Validation
   if (!rawManifest || typeof rawManifest !== 'object' || Array.isArray(rawManifest) || Object.keys(rawManifest).length === 0) {
-    res.status(400).json({
-      success: false,
-      error: 'Bad Request: Request body must be a non-empty JSON object containing a ContentManifest.',
-    });
+    sendErrorResponse(
+      req,
+      res,
+      400,
+      'MALFORMED_REQUEST',
+      'Bad Request: Request body must be a non-empty JSON object containing a ContentManifest.'
+    );
     return;
   }
 
-  // 4. Manifest Schema Validation
+  // 5. Version check (Part C): If manifest_version is provided, enforce "1.0"
+  if (rawManifest.manifest_version !== undefined && rawManifest.manifest_version !== null) {
+    if (rawManifest.manifest_version !== '1.0') {
+      sendErrorResponse(
+        req,
+        res,
+        400,
+        'UNSUPPORTED_MANIFEST_VERSION',
+        `Bad Request: Unsupported manifest_version "${rawManifest.manifest_version}". Only version "1.0" is supported.`
+      );
+      return;
+    }
+  }
+
+  // 6. Manifest Schema Validation
   const validation = validateContentManifest(rawManifest);
   if (!validation.valid) {
-    res.status(400).json({
-      success: false,
-      error: 'Bad Request: ContentManifest validation failed.',
-      validationErrors: validation.errors,
-    });
+    sendErrorResponse(
+      req,
+      res,
+      400,
+      'INVALID_MANIFEST',
+      'Bad Request: ContentManifest validation failed.',
+      { validationErrors: validation.errors }
+    );
     return;
   }
 
-  // 5. Resolve Server-Side Administrative Supabase Client
+  // 7. Resolve Server-Side Administrative Supabase Client
   const serverClient = getServerSupabaseClient();
   const isDryRun = req.query.dryRun === 'true';
 
   if (!serverClient && !isDryRun) {
     // Database credentials not present on server
-    res.status(503).json({
-      success: false,
-      error: 'Service Unavailable: Server-side database connection is not configured.',
-    });
+    sendErrorResponse(
+      req,
+      res,
+      503,
+      'SERVICE_UNAVAILABLE',
+      'Service Unavailable: Server-side database connection is not configured.'
+    );
     return;
   }
 
   try {
-    // 6. Delegate to Ingestion Service (passing validated manifest and optional file)
+    // 8. Delegate to Ingestion Service (passing validated manifest and optional file)
     const result = await ingestContent(rawManifest, {
       client: serverClient || undefined,
       fileResource: fileResource || undefined,
       dryRun: isDryRun,
     });
 
-    // 7. Handle Duplicate Content Conflict (HTTP 409)
+    // 9. Handle Duplicate Content Conflict (HTTP 409)
     if (!result.success && result.errors.some((e) => e.toLowerCase().includes('duplicate content error') || e.toLowerCase().includes('already exists'))) {
-      res.status(409).json({
-        success: false,
-        error: 'Conflict: A publication with this slug already exists.',
-        slug: result.slug,
-      });
+      const conflictMsg = 'Conflict: A publication with this slug already exists.';
+      const isAutomationRequest =
+        req.headers['x-api-version'] === '1.0' ||
+        req.headers['x-client-type'] === 'automation' ||
+        (rawManifest && rawManifest.manifest_version === '1.0');
+
+      const conflictPayload = isAutomationRequest
+        ? {
+            success: false,
+            error: {
+              code: 'CONFLICT_DUPLICATE_SLUG',
+              message: conflictMsg,
+            },
+            error_code: 'CONFLICT_DUPLICATE_SLUG',
+            slug: result.slug,
+          }
+        : {
+            success: false,
+            error: conflictMsg,
+            error_code: 'CONFLICT_DUPLICATE_SLUG',
+            slug: result.slug,
+          };
+
+      if (idempotencyKey) {
+        setCachedIdempotencyRecord(idempotencyKey, 409, conflictPayload);
+      }
+
+      res.status(409).json(conflictPayload);
       return;
     }
 
-    // 8. Handle General Ingestion Failure (HTTP 400 or 500)
+    // 10. Handle General Ingestion Failure (HTTP 400 or 500)
     if (!result.success) {
-      // Determine if failure was due to input/file validation or system error
       const isInputIssue = result.errors.some((e) =>
         e.includes('cannot be empty') ||
         e.includes('Invalid') ||
@@ -150,32 +306,54 @@ export async function handleContentIngestion(req: Request, res: Response): Promi
         e.includes('Self-relationship')
       );
 
-      res.status(isInputIssue ? 400 : 500).json({
-        success: false,
-        error: isInputIssue ? 'Bad Request: Invalid content manifest or file resource.' : 'Content ingestion encountered an error.',
-        errors: result.errors,
-      });
+      sendErrorResponse(
+        req,
+        res,
+        isInputIssue ? 400 : 500,
+        isInputIssue ? 'INVALID_MANIFEST' : 'INTERNAL_SERVER_ERROR',
+        isInputIssue ? 'Bad Request: Invalid content manifest or file resource.' : 'Content ingestion encountered an error.',
+        { errors: result.errors }
+      );
       return;
     }
 
-    // 9. Successful Ingestion Response (HTTP 201)
-    // Structured according to Part G requirements
+    // 11. Standardized Successful Ingestion Response (HTTP 201) (Part F)
+    const contentId = result.content?.id || (isDryRun ? 'dry-run-preview-id' : undefined);
+    const slug = result.slug;
+    const title = result.title || rawManifest.title;
+
+    const fileInfo = (result.fileUploaded || result.filePath) ? {
+      name: result.fileName || rawManifest.file_name || 'file',
+      type: result.fileType || rawManifest.file_type || 'application/octet-stream',
+      size: result.fileSize || rawManifest.file_size || 0,
+      path: result.filePath || '',
+    } : undefined;
+
     const responsePayload: Record<string, unknown> = {
       success: true,
-      contentId: result.content?.id || (isDryRun ? 'dry-run-preview-id' : undefined),
-      id: result.content?.id || (isDryRun ? 'dry-run-preview-id' : undefined),
-      slug: result.slug,
-      title: result.title || rawManifest.title,
+      data: {
+        content_id: contentId,
+        slug,
+        title,
+        ...(fileInfo ? { file: fileInfo } : {}),
+      },
+      // Backward compatibility fields for existing test assertions
+      contentId,
+      id: contentId,
+      slug,
+      title,
+      ...(result.fileUploaded || result.filePath ? {
+        fileUploaded: true,
+        fileName: result.fileName,
+        fileType: result.fileType,
+        fileSize: result.fileSize,
+        storagePath: result.filePath,
+        filePath: result.filePath,
+      } : {}),
     };
 
-    // If a file accompanied the ingestion, additionally return file metadata and storage reference
-    if (result.fileUploaded || result.filePath) {
-      responsePayload.fileUploaded = true;
-      responsePayload.fileName = result.fileName;
-      responsePayload.fileType = result.fileType;
-      responsePayload.fileSize = result.fileSize;
-      responsePayload.storagePath = result.filePath;
-      responsePayload.filePath = result.filePath;
+    if (idempotencyKey) {
+      setCachedIdempotencyRecord(idempotencyKey, 201, responsePayload);
     }
 
     res.status(201).json(responsePayload);
@@ -183,9 +361,12 @@ export async function handleContentIngestion(req: Request, res: Response): Promi
     // Safe operational logging without secret exposure
     console.error('[ingestController] Ingestion error:', err?.message || 'Unknown error');
 
-    res.status(500).json({
-      success: false,
-      error: 'Internal Server Error: Failed to complete content ingestion.',
-    });
+    sendErrorResponse(
+      req,
+      res,
+      500,
+      'INTERNAL_SERVER_ERROR',
+      'Internal Server Error: Failed to complete content ingestion.'
+    );
   }
 }

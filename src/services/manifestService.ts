@@ -22,10 +22,184 @@ import {
   MANIFEST_SECTIONS,
   MANIFEST_CONTENT_TYPES,
   ManifestRelatedItem,
+  AutomationManifestValidationResult,
+  AutomationErrorCode,
+  SUPPORTED_MANIFEST_VERSIONS,
 } from '../types/manifest.js';
 import { validateFileMetadata } from './storageService.js';
 
 export * from '../types/manifest.js';
+
+/**
+ * Validates external source metadata boundary (Part B).
+ * Source metadata is strictly optional and must NEVER affect content classification.
+ */
+export function validateSourceMetadata(source: unknown): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (source === undefined || source === null) {
+    return { valid: true, errors };
+  }
+
+  if (typeof source !== 'object' || Array.isArray(source)) {
+    return { valid: false, errors: ['Source metadata must be a non-null JSON object.'] };
+  }
+
+  const raw = source as Record<string, unknown>;
+  if (raw.system === undefined || raw.system === null) {
+    errors.push('Source metadata field "system" is required.');
+  } else if (typeof raw.system !== 'string' || raw.system.trim().length === 0) {
+    errors.push('Source metadata field "system" must be a non-empty string.');
+  }
+
+  if (raw.source_id !== undefined && raw.source_id !== null && typeof raw.source_id !== 'string') {
+    errors.push('Source metadata field "source_id", when provided, must be a string.');
+  }
+
+  if (raw.source_url !== undefined && raw.source_url !== null) {
+    if (typeof raw.source_url !== 'string' || raw.source_url.trim().length === 0) {
+      errors.push('Source metadata field "source_url", when provided, must be a non-empty string.');
+    }
+  }
+
+  if (raw.generated_at !== undefined && raw.generated_at !== null) {
+    if (typeof raw.generated_at !== 'string' || isNaN(Date.parse(raw.generated_at))) {
+      errors.push('Source metadata field "generated_at", when provided, must be a valid ISO-8601 date string.');
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
+ * Validates a versioned Automation Manifest (Part A, C, I).
+ * 
+ * Strict boundary enforcement for external automation systems:
+ * 1. Requires manifest_version === "1.0".
+ * 2. Requires section, category, topic, content_type, title.
+ * 3. Enforces user metadata authority: NEVER silently infers or mutates taxonomy.
+ * 4. Validates optional source metadata and file resources.
+ */
+export function validateAutomationManifest(manifest: unknown): AutomationManifestValidationResult {
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
+    return {
+      valid: false,
+      errors: ['Manifest must be a non-null JSON object.'],
+      errorCode: 'INVALID_MANIFEST',
+    };
+  }
+
+  const raw = manifest as Record<string, unknown>;
+  const errors: string[] = [];
+  let primaryErrorCode: AutomationErrorCode | undefined;
+
+  // 1. Required field: manifest_version
+  if (raw.manifest_version === undefined || raw.manifest_version === null) {
+    errors.push('Missing required field: "manifest_version". Expected "1.0".');
+    if (!primaryErrorCode) primaryErrorCode = 'MISSING_MANIFEST_VERSION';
+  } else if (typeof raw.manifest_version !== 'string') {
+    errors.push('Field "manifest_version" must be a string.');
+    if (!primaryErrorCode) primaryErrorCode = 'UNSUPPORTED_MANIFEST_VERSION';
+  } else if (!SUPPORTED_MANIFEST_VERSIONS.includes(raw.manifest_version as any)) {
+    errors.push(
+      `Unsupported manifest_version "${raw.manifest_version}". Only version "1.0" is currently supported.`
+    );
+    if (!primaryErrorCode) primaryErrorCode = 'UNSUPPORTED_MANIFEST_VERSION';
+  }
+
+  // 2. Required field: section
+  if (raw.section === undefined || raw.section === null) {
+    errors.push('Missing required field: "section".');
+    if (!primaryErrorCode) primaryErrorCode = 'MISSING_REQUIRED_FIELD';
+  } else if (typeof raw.section !== 'string') {
+    errors.push('Field "section" must be a string.');
+    if (!primaryErrorCode) primaryErrorCode = 'INVALID_SECTION';
+  } else if (!MANIFEST_SECTIONS.includes(raw.section as ManifestSection)) {
+    errors.push(
+      `Invalid section "${raw.section}". Allowed sections are: ${MANIFEST_SECTIONS.join(', ')}.`
+    );
+    if (!primaryErrorCode) primaryErrorCode = 'INVALID_SECTION';
+  }
+
+  // 3. Required field: category
+  if (raw.category === undefined || raw.category === null) {
+    errors.push('Missing required field: "category".');
+    if (!primaryErrorCode) primaryErrorCode = 'MISSING_REQUIRED_FIELD';
+  } else if (typeof raw.category !== 'string') {
+    errors.push('Field "category" must be a string.');
+    if (!primaryErrorCode) primaryErrorCode = 'INVALID_CATEGORY';
+  } else if (raw.category.trim().length === 0) {
+    errors.push('Field "category" cannot be empty or contain only whitespace.');
+    if (!primaryErrorCode) primaryErrorCode = 'INVALID_CATEGORY';
+  }
+
+  // 4. Required field: topic
+  if (raw.topic === undefined || raw.topic === null) {
+    errors.push('Missing required field: "topic".');
+    if (!primaryErrorCode) primaryErrorCode = 'MISSING_REQUIRED_FIELD';
+  } else if (typeof raw.topic !== 'string') {
+    errors.push('Field "topic" must be a string.');
+    if (!primaryErrorCode) primaryErrorCode = 'INVALID_TOPIC';
+  } else if (raw.topic.trim().length === 0) {
+    errors.push('Field "topic" cannot be empty or contain only whitespace.');
+    if (!primaryErrorCode) primaryErrorCode = 'INVALID_TOPIC';
+  }
+
+  // 5. Required field: content_type
+  if (raw.content_type === undefined || raw.content_type === null) {
+    errors.push('Missing required field: "content_type".');
+    if (!primaryErrorCode) primaryErrorCode = 'MISSING_REQUIRED_FIELD';
+  } else if (typeof raw.content_type !== 'string') {
+    errors.push('Field "content_type" must be a string.');
+    if (!primaryErrorCode) primaryErrorCode = 'INVALID_CONTENT_TYPE';
+  } else if (!MANIFEST_CONTENT_TYPES.includes(raw.content_type as ManifestContentType)) {
+    errors.push(
+      `Invalid content_type "${raw.content_type}". Allowed types are: ${MANIFEST_CONTENT_TYPES.join(', ')}.`
+    );
+    if (!primaryErrorCode) primaryErrorCode = 'INVALID_CONTENT_TYPE';
+  }
+
+  // 6. Required field: title
+  if (raw.title === undefined || raw.title === null) {
+    errors.push('Missing required field: "title".');
+    if (!primaryErrorCode) primaryErrorCode = 'MISSING_REQUIRED_FIELD';
+  } else if (typeof raw.title !== 'string') {
+    errors.push('Field "title" must be a string.');
+    if (!primaryErrorCode) primaryErrorCode = 'INVALID_TITLE';
+  } else if (raw.title.trim().length === 0) {
+    errors.push('Field "title" cannot be empty or contain only whitespace.');
+    if (!primaryErrorCode) primaryErrorCode = 'INVALID_TITLE';
+  }
+
+  // 7. Optional source metadata validation
+  if (raw.source !== undefined && raw.source !== null) {
+    const sourceValidation = validateSourceMetadata(raw.source);
+    if (!sourceValidation.valid) {
+      errors.push(...sourceValidation.errors);
+      if (!primaryErrorCode) primaryErrorCode = 'INVALID_SOURCE_METADATA';
+    }
+  }
+
+  // 8. Run base manifest rules for remaining optional fields (tags, visibility, files, URLs)
+  const baseValidation = validateContentManifest(manifest);
+  for (const baseErr of baseValidation.errors) {
+    if (!errors.includes(baseErr)) {
+      errors.push(baseErr);
+    }
+  }
+
+  if (errors.length > 0 && !primaryErrorCode) {
+    primaryErrorCode = 'INVALID_MANIFEST';
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    errorCode: errors.length === 0 ? undefined : primaryErrorCode,
+  };
+}
 
 /**
  * Generate a clean, URL-safe slug from any string
@@ -70,6 +244,21 @@ export function validateContentManifest(manifest: unknown): ManifestValidationRe
   }
 
   const raw = manifest as Record<string, unknown>;
+
+  // Optional version check: if manifest_version is provided, must be supported (1.0)
+  if (raw.manifest_version !== undefined && raw.manifest_version !== null) {
+    if (typeof raw.manifest_version !== 'string' || !SUPPORTED_MANIFEST_VERSIONS.includes(raw.manifest_version as any)) {
+      errors.push(`Unsupported manifest_version "${raw.manifest_version}". Only version "1.0" is currently supported.`);
+    }
+  }
+
+  // Optional source metadata check
+  if (raw.source !== undefined && raw.source !== null) {
+    const srcVal = validateSourceMetadata(raw.source);
+    if (!srcVal.valid) {
+      errors.push(...srcVal.errors);
+    }
+  }
 
   // 1. Required field: title
   if (raw.title === undefined || raw.title === null) {

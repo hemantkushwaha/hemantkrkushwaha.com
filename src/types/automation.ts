@@ -28,15 +28,25 @@ export const SUPPORTED_MANIFEST_VERSIONS = ['1.0'] as const;
 export type SupportedManifestVersion = (typeof SUPPORTED_MANIFEST_VERSIONS)[number];
 
 /**
+ * Supported external source systems in platform taxonomy.
+ * Defined in Step 14 & Step 16 (Part C).
+ */
+export const SUPPORTED_SOURCE_SYSTEMS = [
+  'notebooklm',
+  'google-slides',
+  'google-ai-studio',
+  'google-drive',
+  'manual',
+] as const;
+
+export type SupportedSourceSystem = (typeof SUPPORTED_SOURCE_SYSTEMS)[number];
+
+/**
  * Known external systems for source metadata.
- * Note: Extensible string union allows new trusted automation systems.
+ * Note: Uses canonical supported taxonomy with fallback for extension.
  */
 export type AutomationSourceSystem =
-  | 'notebooklm'
-  | 'google-slides'
-  | 'google-ai-studio'
-  | 'google-drive'
-  | 'manual'
+  | SupportedSourceSystem
   | (string & {});
 
 /**
@@ -277,4 +287,120 @@ export interface GoogleAIStudioAdapter extends SourceAdapter {
 
 export interface GoogleDriveAdapter extends SourceAdapter {
   readonly system: 'google-drive';
+}
+
+/**
+ * ==================================================
+ * STEP 16: EXTERNAL AUTOMATION GATEWAY FOUNDATION
+ * ==================================================
+ * 
+ * Provider-neutral gateway contracts for external automation systems:
+ * NotebookLM / Google Slides / Google Drive / Google AI Studio
+ *                     │
+ *                     ▼
+ *           External Automation
+ *                     │
+ *                     ▼
+ *           Automation Gateway (Step 16)
+ *                     │
+ *                     ▼
+ *              Manifest v1.0
+ *                     │
+ *                     ▼
+ *           Existing Ingestion API (Step 10/13)
+ *                     │
+ *                     ▼
+ *           Supabase + Storage
+ *                     │
+ *                     ▼
+ *                 Website
+ */
+
+/**
+ * Part C & J: Provider-Neutral Gateway Request
+ */
+export interface AutomationGatewayRequest {
+  /**
+   * Required canonical ContentManifest (v1.0)
+   */
+  manifest: AutomationManifest | ContentManifest;
+
+  /**
+   * Optional source provenance metadata identifying the upstream system.
+   * If provided at top-level, it is merged into manifest.source.
+   */
+  source?: AutomationSourceMetadata;
+
+  /**
+   * Optional file payload or resource metadata
+   */
+  file?: {
+    data?: Buffer | Uint8Array | Blob | string;
+    fileName?: string;
+    file_name?: string;
+    fileType?: string;
+    file_type?: string;
+    fileSize?: number;
+    file_size?: number;
+    filePath?: string;
+    file_path?: string;
+  };
+
+  /**
+   * Synonym for file resource
+   */
+  fileResource?: {
+    data: Buffer | Uint8Array | Blob | string;
+    fileName: string;
+    fileType?: string;
+    fileSize?: number;
+    filePath?: string;
+  };
+
+  /**
+   * Optional idempotency key for preventing duplicate executions (Part F)
+   */
+  idempotencyKey?: string;
+
+  /**
+   * If true, performs validation and preview without committing to database/storage
+   */
+  dryRun?: boolean;
+}
+
+/**
+ * Part I: Safe, Non-Sensitive Audit Context
+ * Guaranteed to contain zero secrets, API keys, or private tokens.
+ */
+export interface AutomationGatewayAuditContext {
+  source_system?: string;
+  source_id?: string;
+  idempotency_key_present: boolean;
+  has_file: boolean;
+  section?: string;
+  category?: string;
+  topic?: string;
+  content_type?: string;
+  timestamp: string;
+}
+
+/**
+ * Part H & J: Standardized Gateway Result
+ */
+export interface AutomationGatewayResult {
+  success: boolean;
+  data?: AutomationResponseData;
+  error?: AutomationErrorDetail;
+  error_details?: AutomationErrorDetail;
+  errors?: string[];
+  slug?: string;
+  auditContext?: AutomationGatewayAuditContext;
+}
+
+/**
+ * Optional dependencies for isolated testing and execution
+ */
+export interface AutomationGatewayOptions {
+  client?: any;
+  storageService?: any;
 }

@@ -26,6 +26,7 @@ import {
   AutomationErrorCode,
   SUPPORTED_MANIFEST_VERSIONS,
 } from '../types/manifest.js';
+import { SUPPORTED_SOURCE_SYSTEMS } from '../types/automation.js';
 import { validateFileMetadata } from './storageService.js';
 
 export * from '../types/manifest.js';
@@ -49,6 +50,10 @@ export function validateSourceMetadata(source: unknown): { valid: boolean; error
     errors.push('Source metadata field "system" is required.');
   } else if (typeof raw.system !== 'string' || raw.system.trim().length === 0) {
     errors.push('Source metadata field "system" must be a non-empty string.');
+  } else if (!SUPPORTED_SOURCE_SYSTEMS.includes(raw.system as any)) {
+    errors.push(
+      `Invalid source system "${raw.system}". Allowed systems are: ${SUPPORTED_SOURCE_SYSTEMS.join(', ')}.`
+    );
   }
 
   if (raw.source_id !== undefined && raw.source_id !== null && typeof raw.source_id !== 'string') {

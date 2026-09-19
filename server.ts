@@ -4,6 +4,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { ingestRouter } from './src/server/routes/ingestRoutes.js';
 import storageRouter from './src/server/routes/storageRoutes.js';
+import automationRouter from './src/server/routes/automationRoutes.js';
 
 async function startServer() {
   const app = express();
@@ -46,6 +47,9 @@ async function startServer() {
 
   // Step 10: Secure Server-Side Content Ingestion API
   app.use('/api/ingest', ingestRouter);
+
+  // Step 16: External Automation Gateway API
+  app.use('/api/automation', automationRouter);
 
   // Step 12: Secure Storage & Signed URL API
   app.use('/api/storage', storageRouter);

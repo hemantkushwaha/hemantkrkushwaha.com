@@ -1,0 +1,27 @@
+{
+  "package_version": "1.0",
+  "source": {
+    "system": "notebooklm",
+    "source_id": "test-notebook-id-12345",
+    "source_url": "https://notebooklm.google.com/notebook/test-notebook-id-12345",
+    "source_name": "Sample Test Notebook on Distributed Systems",
+    "generated_at": "2026-09-19T00:00:00.000Z"
+  },
+  "metadata": {
+    "section": "academics",
+    "category": "computer-networks",
+    "topic": "arp",
+    "content_type": "study_material",
+    "title": "Address Resolution Protocol (ARP) Comprehensive Study Notes",
+    "description": "Sample test export package containing lecture notes and protocol breakdown for ARP packet exchange.",
+    "tags": ["networking", "protocols", "arp", "lan", "sample-test"]
+  },
+  "content": {
+    "body": "# Address Resolution Protocol (ARP)\n\n## 1. Protocol Overview\nThe Address Resolution Protocol (**ARP**) dynamically maps a 32-bit IPv4 network address to a 48-bit media access control (**MAC**) link-layer hardware address.\n\n### Mathematical Model of Packet Header\n$$\\text{Total Length} = 28 \\text{ bytes (Ethernet / IPv4)}$$\n\n| Field | Length (Bytes) | Description |\n| :--- | :--- | :--- |\n| Hardware Type (HTYPE) | 2 | Typically Ethernet (`0x0001`) |\n| Protocol Type (PTYPE) | 2 | Typically IPv4 (`0x0800`) |\n| Hardware Address Length (HLEN) | 1 | `6` for IEEE 802.3 MAC |\n| Protocol Address Length (PLEN) | 1 | `4` for IPv4 |\n| Operation Code (OPER) | 2 | `1` for Request, `2` for Reply |\n\n```text\n+-----------------------+-----------------------+\n| Hardware Type (16)    | Protocol Type (16)    |\n+-----------------------+-----------------------+\n| HLEN (8)  | PLEN (8)  | Operation Code (16)   |\n+-----------------------+-----------------------+\n```\n\n- Detailed reference: [RFC 826](https://datatracker.ietf.org/doc/html/rfc826)\n"
+  },
+  "file": {
+    "file_name": "arp_study_notes_sample.pdf",
+    "file_type": "application/pdf",
+    "file_size": 1048576
+  }
+}

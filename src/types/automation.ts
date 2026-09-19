@@ -404,3 +404,5 @@ export interface AutomationGatewayOptions {
   client?: any;
   storageService?: any;
 }
+
+export * from './notebookLMExportPackage.js';

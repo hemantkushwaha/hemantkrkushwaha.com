@@ -254,3 +254,71 @@ The following data are **strictly prohibited** from telemetry and logs:
 | **Google Drive / Slides API** | **None (Prohibited)** | Future provider integration |
 | **Persistent Audit Database** | **None (Prohibited)** | Optional future analytics service |
 | **Database Schema Modifications** | **None (Zero migrations)** | Production PostgreSQL schema locked |
+
+---
+
+## 11. Step 19 — Controlled NotebookLM Export Ingestion Runner
+
+The **NotebookLM Ingestion Runner** (`scripts/notebookLM-ingest.ts`) is a local/server-side CLI automation tool that validates, converts, and submits local `NotebookLM Export Package v1.0` files to the production Automation Gateway (`POST /api/automation/ingest`).
+
+### Architectural Topology
+
+```
+NotebookLM
+    ↓ (Manual export / copy)
+NotebookLM Export Package v1.0 (Local JSON)
+    ↓
+Ingestion Runner (scripts/notebookLM-ingest.ts)
+    ↓ (Validates package + reuses NotebookLMAdapter)
+Content Manifest v1.0
+    ↓ (Authenticated HTTP POST with Idempotency-Key)
+POST /api/automation/ingest (Gateway)
+    ↓
+Existing Content Ingestion Pipeline (ingestContent)
+    ↓
+Supabase PostgreSQL + Private Storage
+```
+
+### Invariants
+
+1. **Zero Browser Automation**: No Puppeteer, Playwright, scraping, session hijacking, or cookies.
+2. **Zero Direct Database/Storage Access**: Runner only communicates with the gateway HTTP API; it never imports Supabase or touches storage buckets directly.
+3. **Zero Secret Leakage**: `CONTENT_INGESTION_API_KEY` is loaded from server-side/local environment only and is never printed, logged, or included in error traces.
+4. **Deterministic Idempotency**: Every package produces a deterministic `Idempotency-Key` (SHA-256 over canonical package content and taxonomy), ensuring that repeated runs never duplicate content.
+5. **Production Confirmation**: Transmissions require an explicit `--confirm` flag. Without `--confirm`, the runner exits cleanly without initiating network traffic.
+6. **No Automatic Retries**: If the gateway returns an error or failure, the runner stops immediately.
+
+### Environment Configuration
+
+| Variable | Scope | Purpose | Example |
+|---|---|---|---|
+| `CONTENT_INGESTION_BASE_URL` | Local / Server-side CLI | Base target URL of the platform gateway | `https://hemantkrkushwaha.com` |
+| `CONTENT_INGESTION_API_KEY` | Local / Server-side CLI | Secret Bearer authentication token | `[REDACTED_SECRET]` |
+
+*Never prefix these variables with `VITE_` or include them in client bundles.*
+
+### CLI Usage
+
+```bash
+# 1. Safe Dry-Run Inspection (Zero Network Calls, Zero Content Created)
+npm run ingest:notebooklm -- ./examples/notebooklm-export-package.json --dry-run
+
+# 2. Confirmed Production Submission
+CONTENT_INGESTION_BASE_URL="https://hemantkrkushwaha.com" \
+CONTENT_INGESTION_API_KEY="<secret>" \
+npm run ingest:notebooklm -- ./examples/notebooklm-export-package.json --confirm
+```
+
+### Deterministic Idempotency Key Algorithm
+
+The runner computes a SHA-256 digest over the normalized package attributes:
+- `source.system`, `source.source_id`
+- `metadata.section`, `metadata.category`, `metadata.topic`, `metadata.content_type`, `metadata.title`
+- `content.body`
+- `file.file_name`, `file.file_size`
+
+Formatted as:
+```text
+nlm_<32-character-hex-hash>
+```
+Identical packages generate the exact same key. Divergent packages generate distinct keys.

@@ -117,6 +117,70 @@ export interface NotebookLMSourceInput {
 }
 
 /**
+ * Step 21: Normalized Google Drive Source Input
+ * 
+ * Represents metadata and content obtained from Google Drive
+ * accompanied by caller-provided, non-negotiable taxonomy metadata.
+ * 
+ * Taxonomical fields (section, category, topic, content_type, title)
+ * MUST be explicitly provided by the caller. The adapter will NEVER
+ * infer or alter them.
+ */
+export interface GoogleDriveSourceInput {
+  // Required user-controlled taxonomy (cannot be inferred from Drive metadata)
+  section: ManifestSection | string;
+  category: string;
+  topic: string;
+  content_type: ManifestContentType | string;
+  title: string;
+
+  // Optional taxonomy/presentation
+  subcategory?: string;
+  description?: string;
+  tags?: string[];
+  language?: string;
+  visibility?: ContentVisibility;
+  is_featured?: boolean;
+  published?: boolean;
+  external_url?: string;
+
+  // Body content (if extracted from doc or supplied by caller)
+  body?: string;
+  content?: string; // Accepted synonym for body
+
+  // Expected fields from future official Google Drive API integration
+  file_id?: string;
+  id?: string; // Standard Drive API v3 field
+  name?: string; // Standard Drive API v3 field
+  mime_type?: string;
+  mimeType?: string; // Standard Drive API v3 field
+  web_view_link?: string;
+  webViewLink?: string; // Standard Drive API v3 field
+  download_url?: string;
+  webContentLink?: string; // Standard Drive API v3 field
+  size?: number | string; // Standard Drive API v3 field
+  modified_time?: string;
+  modifiedTime?: string; // Standard Drive API v3 field
+  created_time?: string;
+  createdTime?: string; // Standard Drive API v3 field
+  parent_folder_id?: string;
+  parents?: string[]; // Standard Drive API v3 field
+
+  // Source provenance tracking
+  source_id?: string;
+  source_url?: string;
+  source_name?: string;
+  generated_at?: string;
+
+  // Binary file payload (if downloaded or attached)
+  file_name?: string;
+  file_type?: string;
+  file_size?: number;
+  file_data?: Buffer | Uint8Array;
+  data?: Buffer | Uint8Array;
+}
+
+/**
  * Formal Automation Manifest Contract (Version 1.0)
  * 
  * Single source of truth for automated content placement.
@@ -285,8 +349,11 @@ export interface GoogleAIStudioAdapter extends SourceAdapter {
   readonly system: 'google-ai-studio';
 }
 
-export interface GoogleDriveAdapter extends SourceAdapter {
+export interface GoogleDriveAdapter<TInput = GoogleDriveSourceInput> extends SourceAdapter<TInput> {
   readonly system: 'google-drive';
+  adapt(
+    input: RawSourceInput<TInput> | TInput | any
+  ): Promise<AdaptedManifestResult> | AdaptedManifestResult;
 }
 
 /**

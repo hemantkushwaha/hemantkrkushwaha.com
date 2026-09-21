@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import { ingestRouter } from './src/server/routes/ingestRoutes.js';
 import storageRouter from './src/server/routes/storageRoutes.js';
 import automationRouter from './src/server/routes/automationRoutes.js';
+import { googleAuthRouter } from './src/server/routes/googleAuthRoutes.js';
 
 async function startServer() {
   const app = express();
@@ -50,6 +51,9 @@ async function startServer() {
 
   // Step 16: External Automation Gateway API
   app.use('/api/automation', automationRouter);
+
+  // Step 22: Google Drive OAuth 2.0 Foundation API
+  app.use('/api/auth/google', googleAuthRouter);
 
   // Step 12: Secure Storage & Signed URL API
   app.use('/api/storage', storageRouter);

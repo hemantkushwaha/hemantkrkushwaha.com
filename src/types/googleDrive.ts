@@ -197,3 +197,35 @@ export interface GoogleHttpResponse<T = any> {
 export type GoogleHttpClient = (
   options: GoogleHttpRequestOptions
 ) => Promise<GoogleHttpResponse>;
+
+/**
+ * Step 22C: Encrypted Google OAuth connection record for server-side persistence.
+ * RLS strictly prohibits client/public access; only trusted server code accesses this.
+ */
+export interface GoogleOAuthConnectionRecord {
+  id?: string;
+  provider: 'google';
+  provider_account_id?: string;
+  email?: string;
+  access_token_encrypted: string;
+  refresh_token_encrypted: string;
+  token_type: string;
+  scope: string;
+  expires_at: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * Safe connection status metadata returned to callers.
+ * Guaranteed to NEVER leak access_token, refresh_token, client_secret, or encryption key.
+ */
+export interface GoogleConnectionSafeStatus {
+  connected: boolean;
+  provider: string;
+  email?: string;
+  scope?: string;
+  expires_at?: string;
+  connected_at?: string;
+  message?: string;
+}

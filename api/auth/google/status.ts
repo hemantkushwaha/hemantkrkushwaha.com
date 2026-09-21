@@ -26,8 +26,8 @@ export default async function handler(req: any, res: any) {
 
   return res.status(200).json({
     status: 'ok',
-    mode: 'foundation',
-    service: 'Google Drive OAuth 2.0 Foundation (Step 22)',
+    mode: 'production',
+    service: 'Google Drive OAuth 2.0 (Step 22C)',
     configured: hasClientId && hasClientSecret && hasRedirectUri,
     details: {
       hasClientId,

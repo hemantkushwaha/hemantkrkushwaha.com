@@ -1,20 +1,24 @@
 /**
- * Google Drive OAuth Foundation Routes
+ * Google Drive OAuth Foundation & Connection Routes
  * 
  * Hemant Kumar Kushwaha Knowledge Platform (hemantkrkushwaha.com)
- * Architecture: Step 22 — Google Drive API / OAuth Foundation
+ * Architecture: Step 22C — Secure Google Drive OAuth Authorization & Connection
  * 
  * Mount path: /api/auth/google
  * 
  * Endpoints:
- * - GET /api/auth/google/callback: Safe callback route architecture placeholder
- * - GET /api/auth/google/status: Safe diagnostics (zero secret leakage)
+ * - GET /api/auth/google: Service index & overview
+ * - GET /api/auth/google/status: Configuration diagnostics (zero secret leakage)
  * - GET /api/auth/google/url: Authorization URL generator
+ * - GET /api/auth/google/callback: OAuth code exchange & AES-256-GCM encrypted persistence
+ * - GET /api/auth/google/connection-status: Safe connected metadata (zero secret leakage)
+ * - POST /api/auth/google/disconnect: Revocation & removal of connected account
  * 
  * Invariants:
- * - Step 22 is an architectural foundation only
- * - Live Google account connection is DISABLED in Step 22 foundation mode
- * - NO real tokens logged, saved to plaintext database, or exposed to browser
+ * - Single Google Account connection architecture
+ * - Cryptographically secure AES-256-GCM token encryption
+ * - ZERO access tokens, refresh tokens, or client secrets returned or leaked
+ * - Public/anonymous access denied to tokens by RLS and server isolation
  */
 
 import { Router, Request, Response } from 'express';
@@ -28,22 +32,20 @@ export const googleAuthRouter = Router();
 
 /**
  * GET /api/auth/google
- * Safe foundation architecture endpoint.
- * Reports that live Google OAuth authorization is disabled during Step 22 foundation mode.
- * Zero live Google accounts are connected; zero live OAuth requests are made.
+ * Service index endpoint.
  */
 googleAuthRouter.get('/', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
-    mode: 'foundation',
-    message:
-      'Step 22 Google OAuth architecture foundation. Live Google OAuth authorization is disabled in Step 22 foundation mode. No Google account is connected.',
-    activated: false,
+    mode: 'production',
+    service: 'Google Drive OAuth 2.0 (Step 22C)',
     scope: GOOGLE_DRIVE_READONLY_SCOPE,
     routes: {
       status: '/api/auth/google/status',
       url: '/api/auth/google/url',
       callback: '/api/auth/google/callback',
+      connectionStatus: '/api/auth/google/connection-status',
+      disconnect: '/api/auth/google/disconnect',
     },
   });
 });
@@ -61,8 +63,8 @@ googleAuthRouter.get('/status', (req: Request, res: Response) => {
 
   res.json({
     status: 'ok',
-    mode: 'foundation',
-    service: 'Google Drive OAuth 2.0 Foundation (Step 22)',
+    mode: 'production',
+    service: 'Google Drive OAuth 2.0 (Step 22C)',
     configured: hasClientId && hasClientSecret && hasRedirectUri,
     details: {
       hasClientId,
@@ -120,22 +122,23 @@ googleAuthRouter.get('/url', (req: Request, res: Response) => {
 
 /**
  * GET /api/auth/google/callback
- * Official Google OAuth callback handler architecture.
+ * Official Google OAuth callback handler.
  * 
- * In Step 22:
- * - Validates presence of the authorization code.
- * - Handles state parameter checks.
- * - Returns a safe foundation confirmation.
- * - Does NOT connect live user Google accounts or perform token persistence.
+ * Step 22C:
+ * - Validates authorization code and CSRF state
+ * - Exchanges code for tokens via official Google token endpoint
+ * - Encrypts access and refresh tokens using AES-256-GCM
+ * - Stores connection record in google_oauth_connections table
+ * - Returns safe metadata confirming connection (zero secrets exposed)
  */
 googleAuthRouter.get('/callback', async (req: Request, res: Response) => {
-  const { code, state, error } = req.query;
+  const { code, state, error, error_description } = req.query;
 
   if (error) {
     res.status(400).json({
       success: false,
       error: 'GOOGLE_OAUTH_DENIED',
-      message: `Google OAuth consent was denied or failed: ${String(error)}`,
+      message: `Google OAuth consent was denied: ${String(error_description || error)}`,
     });
     return;
   }
@@ -149,18 +152,84 @@ googleAuthRouter.get('/callback', async (req: Request, res: Response) => {
     return;
   }
 
-  // Foundation mode safety boundary:
-  // Step 22 confirms the architectural routing and parameter validation without
-  // executing live account mutations or storing plaintext tokens.
-  res.json({
-    success: true,
-    mode: 'foundation_placeholder',
-    message:
-      'Step 22 Google OAuth callback route foundation verified. Live account connection and token persistence are disabled in Step 22 foundation mode.',
-    received_code: true,
-    state_received: Boolean(state),
-    timestamp: new Date().toISOString(),
-  });
+  try {
+    const record = await googleDriveOAuthService.exchangeAndStoreConnection(code, {
+      state: typeof state === 'string' ? state : undefined,
+    });
+
+    res.json({
+      success: true,
+      connected: true,
+      provider: 'google',
+      email: record.email,
+      scope: record.scope,
+      expires_at: record.expires_at,
+      message: 'Google Drive account connected successfully with read-only scope.',
+    });
+  } catch (err: any) {
+    if (err instanceof GoogleOAuthError) {
+      res.status(err.statusCode).json({
+        success: false,
+        error: err.code,
+        message: err.message,
+      });
+      return;
+    }
+    res.status(500).json({
+      success: false,
+      error: 'OAUTH_CALLBACK_FAILED',
+      message: err.message || 'Failed to complete Google OAuth authorization.',
+    });
+  }
+});
+
+/**
+ * GET /api/auth/google/connection-status
+ * Safe diagnostics indicating whether a Google account is currently connected.
+ * GUARANTEE: Never exposes tokens, secrets, or encryption keys.
+ */
+googleAuthRouter.get('/connection-status', async (req: Request, res: Response) => {
+  try {
+    const status = await googleDriveOAuthService.getSafeConnectionStatus();
+    res.json({
+      success: true,
+      ...status,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: 'CONNECTION_STATUS_FAILED',
+      message: err.message || 'Failed to retrieve connection status.',
+    });
+  }
+});
+
+/**
+ * POST /api/auth/google/disconnect
+ * Securely disconnects Google Drive account by revoking credentials and removing record.
+ */
+googleAuthRouter.post('/disconnect', async (req: Request, res: Response) => {
+  try {
+    const result = await googleDriveOAuthService.disconnectGoogleAccount();
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (err: any) {
+    if (err instanceof GoogleOAuthError) {
+      res.status(err.statusCode).json({
+        success: false,
+        error: err.code,
+        message: err.message,
+      });
+      return;
+    }
+    res.status(500).json({
+      success: false,
+      error: 'DISCONNECT_FAILED',
+      message: err.message || 'Failed to disconnect Google account.',
+    });
+  }
 });
 
 export default googleAuthRouter;

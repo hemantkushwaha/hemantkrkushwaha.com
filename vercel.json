@@ -5,7 +5,11 @@
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/google-drive/files/:fileId/preview",
+      "destination": "/api/google-drive/files/[fileId]/preview"
+    },
+    {
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]

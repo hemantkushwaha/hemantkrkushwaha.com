@@ -100,6 +100,13 @@ export class GoogleDriveService {
   }
 
   /**
+   * Set or update pluggable HTTP client for testing or custom transports
+   */
+  public setHttpClient(client?: GoogleHttpClient): void {
+    this.httpClient = client;
+  }
+
+  /**
    * Verifies access token is present
    */
   private requireAccessToken(): string {

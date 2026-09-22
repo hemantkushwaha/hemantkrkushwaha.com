@@ -101,6 +101,27 @@ export class GoogleDriveOAuthService {
   }
 
   /**
+   * Set or update pluggable HTTP client for testing or custom transports
+   */
+  public setHttpClient(client?: GoogleHttpClient): void {
+    this.httpClient = client;
+  }
+
+  /**
+   * Set or update custom Supabase client for testing
+   */
+  public setSupabaseClient(client: any): void {
+    this.customSupabaseClient = client;
+  }
+
+  /**
+   * Set or update encryption key for testing
+   */
+  public setEncryptionKey(key?: string): void {
+    this.explicitEncryptionKey = key;
+  }
+
+  /**
    * Resolves OAuth configuration from explicit options or server environment variables.
    * NEVER reads VITE_* client-side variables.
    */
@@ -1142,6 +1163,34 @@ export class GoogleDriveOAuthService {
       ...connection,
       ...updatedRecord,
     };
+  }
+
+  /**
+   * Retrieves a valid, decrypted access token for the active Google OAuth connection.
+   * If the stored token is expired or within a 60-second expiration buffer,
+   * it automatically uses the refresh token to obtain and persist fresh credentials.
+   * GUARANTEE: Never logs or exposes tokens.
+   */
+  public async getValidAccessToken(forceRefresh = false): Promise<string> {
+    const connection = await this.getStoredConnection();
+    if (!connection) {
+      throw new GoogleOAuthError(
+        'NOT_CONNECTED',
+        'No Google OAuth connection found in database. Please authenticate via /api/auth/google/url.',
+        404
+      );
+    }
+
+    const now = Date.now();
+    const expiresAt = new Date(connection.expires_at).getTime();
+    const isExpiredOrExpiringSoon = forceRefresh || isNaN(expiresAt) || expiresAt - now < 60 * 1000;
+
+    let activeRecord = connection;
+    if (isExpiredOrExpiringSoon) {
+      activeRecord = await this.refreshStoredConnection();
+    }
+
+    return this.decryptToken(activeRecord.access_token_encrypted);
   }
 
   /**

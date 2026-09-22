@@ -382,13 +382,27 @@ export class DefaultGoogleDriveAdapter implements GoogleDriveAdapter {
     let fileName: string | undefined = normalizeOptionalString(payload.file_name);
     let fileType: string | undefined = normalizeOptionalString(payload.file_type);
 
-    if (!fileName) {
-      if (payload.name && (hasSupportedBinaryExtension(payload.name) || !isNativeDoc)) {
-        fileName = payload.name.trim();
+    if (isNativeDoc) {
+      if (!fileName || !hasSupportedBinaryExtension(fileName)) {
+        fileName = undefined;
+        fileType = undefined;
+      }
+    } else {
+      if (!fileName) {
+        if (payload.name && hasSupportedBinaryExtension(payload.name)) {
+          fileName = payload.name.trim();
+        }
+      }
+      if (fileName && !hasSupportedBinaryExtension(fileName)) {
+        // If it's a text/markdown document converted to body, do not set invalid binary file attributes
+        if (body !== undefined) {
+          fileName = undefined;
+          fileType = undefined;
+        }
       }
     }
 
-    if (!fileType && !isNativeDoc) {
+    if (!fileType && !isNativeDoc && fileName && hasSupportedBinaryExtension(fileName)) {
       fileType = rawMimeType;
     }
 
@@ -410,9 +424,13 @@ export class DefaultGoogleDriveAdapter implements GoogleDriveAdapter {
       ...(published !== undefined ? { published } : {}),
       ...(externalUrl ? { external_url: externalUrl } : {}),
       ...(sourceUrl ? { source_url: sourceUrl } : {}),
-      ...(fileName ? { file_name: fileName } : {}),
-      ...(fileType ? { file_type: fileType } : {}),
-      ...(fileSize !== undefined ? { file_size: fileSize } : {}),
+      ...(fileName
+        ? {
+            file_name: fileName,
+            ...(fileType ? { file_type: fileType } : {}),
+            ...(fileSize !== undefined ? { file_size: fileSize } : {}),
+          }
+        : {}),
       source,
     };
 
@@ -472,6 +490,8 @@ export class DefaultGoogleDriveAdapter implements GoogleDriveAdapter {
     }
   }
 }
+
+export type { GoogleDriveAdapter } from '../../types/automation.js';
 
 /**
  * Exported singleton instance

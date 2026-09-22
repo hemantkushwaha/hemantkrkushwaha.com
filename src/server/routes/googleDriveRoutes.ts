@@ -10,7 +10,10 @@
 
 import { Router } from 'express';
 import { authenticateIngestionRequest } from '../middleware/authMiddleware.js';
-import { handleListGoogleDriveFiles } from '../controllers/googleDriveController.js';
+import {
+  handleListGoogleDriveFiles,
+  handlePreviewGoogleDriveFile,
+} from '../controllers/googleDriveController.js';
 
 export const googleDriveRouter = Router();
 
@@ -19,6 +22,13 @@ googleDriveRouter.get(
   '/files',
   authenticateIngestionRequest,
   handleListGoogleDriveFiles
+);
+
+// GET /api/google-drive/files/:fileId/preview - Secure preview transformation of a single Drive file into Content Manifest v1.0
+googleDriveRouter.get(
+  '/files/:fileId/preview',
+  authenticateIngestionRequest,
+  handlePreviewGoogleDriveFile
 );
 
 export default googleDriveRouter;

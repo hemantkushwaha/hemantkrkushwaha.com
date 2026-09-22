@@ -71,6 +71,7 @@ export interface ContentManifest {
   manifest_version?: string;
   source?: unknown;
   body?: string;
+  content?: { body?: string };
   subcategory?: string;
   description?: string;
   tags?: string[];

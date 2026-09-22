@@ -14,6 +14,15 @@ export type AcademicResourceType =
   | 'interactive_app'
   | 'question_bank';
 
+export interface AcademicResourceSource {
+  system: 'google-drive';
+  source_id: string;
+  source_name: string;
+  mime_type: string;
+  web_view_link?: string;
+  size_bytes?: number;
+}
+
 export interface AcademicResource {
   id: string;
   type: AcademicResourceType;
@@ -21,6 +30,7 @@ export interface AcademicResource {
   description: string;
   status: 'pending' | 'connected';
   statusMessage: string;
+  source?: AcademicResourceSource;
 }
 
 export interface AcademicTopic {

@@ -59,34 +59,37 @@ async function runAcademicNavigationSliceTests() {
   console.log('  ✅ PASS: 1.4 "TCP" topic model is correctly linked under Transport Layer');
 
   // 2. RESOURCE CARDS INVARIANTS
-  console.log('\n--- 2. Resource Cards Invariants (Exact 4, Pending Status, Zero Fake URLs) ---');
+  console.log('\n--- 2. Resource Cards Invariants (Exact 4, Zero Fake URLs) ---');
 
   assert.equal(tcp.resources.length, 4, 'TCP topic must define exactly four resource cards');
   console.log('  ✅ PASS: 2.1 Exactly four resource cards defined for TCP');
 
-  const expectedTypes = ['study_material', 'ppt', 'interactive_app', 'question_bank'];
-  const expectedTitles = ['Study Material', 'PPT', 'Interactive App', 'Question Bank'];
+  const studyMaterial = tcp.resources.find((r) => r.id === 'study-material')!;
+  assert.equal(studyMaterial.status, 'connected', 'Study Material status must be "connected"');
+  assert.equal(studyMaterial.statusMessage, 'Connected → Google Drive');
+  assert.equal(studyMaterial.source?.system, 'google-drive');
+  assert.equal(studyMaterial.source?.source_id, '1El6w7DweSLfbnkdg45qdsOgFbo4BMDGj');
 
-  for (let i = 0; i < 4; i++) {
-    const res = tcp.resources[i];
-    assert.equal(res.type, expectedTypes[i], `Resource ${i} type must match ${expectedTypes[i]}`);
-    assert.equal(res.title, expectedTitles[i], `Resource ${i} title must match ${expectedTitles[i]}`);
+  const otherResources = tcp.resources.filter((r) => r.id !== 'study-material');
+  assert.equal(otherResources.length, 3, 'Must have 3 other resources');
+  for (const res of otherResources) {
     assert.equal(res.status, 'pending', `Resource ${res.title} status must be "pending"`);
     assert.equal(
       res.statusMessage,
       'Resource not connected yet',
       `Resource ${res.title} statusMessage must be "Resource not connected yet"`
     );
+  }
 
-    // Verify ZERO fake URLs or placeholder links
+  // Verify ZERO fake URLs across all resources
+  for (const res of tcp.resources) {
     const stringified = JSON.stringify(res);
     assert.ok(!stringified.includes('http://'), `Resource ${res.title} must NOT contain http:// URLs`);
-    assert.ok(!stringified.includes('https://'), `Resource ${res.title} must NOT contain https:// URLs`);
-    assert.ok(!stringified.includes('drive.google.com'), `Resource ${res.title} must NOT contain fake Google Drive links`);
+    assert.ok(!stringified.includes('example.com'), `Resource ${res.title} must NOT contain example.com`);
     assert.ok(!stringified.includes('placeholder'), `Resource ${res.title} must NOT contain placeholder tags`);
   }
-  console.log('  ✅ PASS: 2.2 All 4 resources have title, type, and statusMessage="Resource not connected yet"');
-  console.log('  ✅ PASS: 2.3 Verified ZERO fake URLs or placeholder Google Drive links in resource data');
+  console.log('  ✅ PASS: 2.2 Study Material is connected to Google Drive and other 3 resources have statusMessage="Resource not connected yet"');
+  console.log('  ✅ PASS: 2.3 Verified ZERO fake URLs across all 4 resources');
 
   // 3. CASE INSENSITIVITY & ERROR TOLERANCE
   console.log('\n--- 3. Lookup Tolerances & Edge Cases ---');

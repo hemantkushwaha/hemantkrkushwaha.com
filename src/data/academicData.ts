@@ -50,8 +50,16 @@ export const academicSubjects: AcademicSubject[] = [
                 title: 'Study Material',
                 description:
                   'Comprehensive lecture notes, packet header format diagrams, state transition walkthroughs, and analytical explanations of TCP mechanisms.',
-                status: 'pending',
-                statusMessage: 'Resource not connected yet',
+                status: 'connected',
+                statusMessage: 'Connected → Google Drive',
+                source: {
+                  system: 'google-drive',
+                  source_id: '1El6w7DweSLfbnkdg45qdsOgFbo4BMDGj',
+                  source_name: 'transport-layer-udp-tcp-guide.docx',
+                  mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                  web_view_link: 'https://docs.google.com/document/d/1El6w7DweSLfbnkdg45qdsOgFbo4BMDGj/edit?usp=drivesdk&ouid=111566866522796971778&rtpof=true&sd=true',
+                  size_bytes: 47989,
+                },
               },
               {
                 id: 'ppt',

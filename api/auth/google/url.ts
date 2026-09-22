@@ -23,7 +23,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const state = typeof req.query?.state === 'string' ? req.query.state : undefined;
-    const authUrlData = googleDriveOAuthService.generateAuthorizationUrl({
+    const authUrlData = await googleDriveOAuthService.generateAuthorizationUrlAsync({
       state,
       accessType: 'offline',
       prompt: 'consent',

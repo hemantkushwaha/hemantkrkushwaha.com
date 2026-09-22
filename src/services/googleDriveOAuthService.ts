@@ -178,9 +178,59 @@ export class GoogleDriveOAuthService {
   }
 
   /**
+   * Hashes a raw state token using SHA-256 for secure database persistence.
+   * Guarantees raw state is NEVER stored in database tables or logs.
+   */
+  public hashState(state: string): string {
+    return crypto.createHash('sha256').update(state).digest('hex');
+  }
+
+  /**
    * Generates a cryptographically secure random state token for CSRF protection.
    * Produces a 64-character hex string (32 cryptographically random bytes).
+   * Stores the SHA-256 hash in google_oauth_states if database is available.
    * Contains ZERO sensitive information.
+   */
+  public async generateStateAsync(): Promise<string> {
+    const nonce = crypto.randomBytes(32).toString('hex');
+    const stateHash = this.hashState(nonce);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+    // In-memory cache as secondary fallback
+    this.activeStates.set(nonce, {
+      expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+      used: false,
+    });
+
+    // Opportunistic cleanup of expired states and persistence of fresh state hash
+    const supabase = this.getSupabase();
+    if (supabase) {
+      try {
+        // Asynchronously clean expired records
+        supabase
+          .from('google_oauth_states')
+          .delete()
+          .lt('expires_at', new Date().toISOString())
+          .then(() => {})
+          .catch(() => {});
+
+        // Persist SHA-256 hash of new state
+        await supabase.from('google_oauth_states').insert([
+          {
+            state_hash: stateHash,
+            expires_at: expiresAt,
+          },
+        ]);
+      } catch {
+        // If table is not yet migrated, in-memory state remains intact
+      }
+    }
+
+    return nonce;
+  }
+
+  /**
+   * Synchronous state generation (for offline tests / in-memory compatibility).
    */
   public generateState(): string {
     const nonce = crypto.randomBytes(32).toString('hex');
@@ -196,7 +246,7 @@ export class GoogleDriveOAuthService {
    * Employs constant-time buffer comparison to prevent timing side-channel attacks.
    * Enforces expiration (10 minutes) and single-use replay prevention.
    */
-  public validateState(receivedState: string, expectedState?: string): void {
+  public async validateState(receivedState: string, expectedState?: string): Promise<void> {
     if (!receivedState || typeof receivedState !== 'string') {
       throw new GoogleOAuthError(
         'INVALID_STATE',
@@ -230,7 +280,61 @@ export class GoogleDriveOAuthService {
       return;
     }
 
-    // Check in-memory / registered active states
+    // 1. Check Durable Database (google_oauth_states) if available
+    const supabase = this.getSupabase();
+    if (supabase) {
+      const stateHash = this.hashState(receivedState);
+      const nowIso = new Date().toISOString();
+
+      try {
+        // Atomic compare-and-consume: update consumed_at WHERE state_hash matches AND consumed_at IS NULL AND expires_at > now
+        const { data, error } = await supabase
+          .from('google_oauth_states')
+          .update({ consumed_at: nowIso })
+          .eq('state_hash', stateHash)
+          .is('consumed_at', null)
+          .gt('expires_at', nowIso)
+          .select('id, state_hash, expires_at, consumed_at');
+
+        if (!error && data && data.length > 0) {
+          // Successfully and atomically consumed the state record!
+          this.usedStateNonces.add(receivedState);
+          return;
+        }
+
+        // If update returned 0 rows, check whether record exists, is consumed, or is expired
+        const { data: existingRows } = await supabase
+          .from('google_oauth_states')
+          .select('id, expires_at, consumed_at')
+          .eq('state_hash', stateHash)
+          .limit(1);
+
+        if (existingRows && existingRows.length > 0) {
+          const rec = existingRows[0];
+          if (rec.consumed_at) {
+            throw new GoogleOAuthError(
+              'INVALID_STATE',
+              'OAuth state has already been used. Replay attempt rejected.',
+              400
+            );
+          }
+          if (new Date(rec.expires_at).getTime() < Date.now()) {
+            throw new GoogleOAuthError(
+              'EXPIRED_STATE',
+              'OAuth state has expired. Please initiate authorization again.',
+              400
+            );
+          }
+        }
+      } catch (dbErr: any) {
+        if (dbErr instanceof GoogleOAuthError) {
+          throw dbErr;
+        }
+        // Fall through to in-memory check if table does not exist yet
+      }
+    }
+
+    // 2. Check in-memory / registered active states
     if (this.activeStates.has(receivedState)) {
       const entry = this.activeStates.get(receivedState)!;
       if (entry.used) {
@@ -251,7 +355,7 @@ export class GoogleDriveOAuthService {
       return;
     }
 
-    // Check if receivedState is signed serverless state format: nonce.timestamp.signature
+    // 3. Check if receivedState is signed serverless state format: nonce.timestamp.signature
     const parts = receivedState.split('.');
     if (parts.length === 3) {
       const [nonce, timestampStr, signature] = parts;
@@ -321,7 +425,7 @@ export class GoogleDriveOAuthService {
       return;
     }
 
-    // If 64 hex characters but not in activeStates (e.g. across serverless lambdas)
+    // If 64 hex characters but not in activeStates or database
     if (/^[0-9a-fA-F]{64}$/.test(receivedState)) {
       if (this.usedStateNonces.has(receivedState)) {
         throw new GoogleOAuthError(
@@ -330,8 +434,12 @@ export class GoogleDriveOAuthService {
           400
         );
       }
-      this.usedStateNonces.add(receivedState);
-      return;
+      // Unknown raw 64-char state not recognized by DB or activeStates
+      throw new GoogleOAuthError(
+        'INVALID_STATE',
+        'Unrecognized or expired OAuth state parameter.',
+        400
+      );
     }
 
     throw new GoogleOAuthError(
@@ -339,6 +447,54 @@ export class GoogleDriveOAuthService {
       'Unrecognized or expired OAuth state parameter.',
       400
     );
+  }
+
+  /**
+   * Generates the official Google OAuth 2.0 authorization URL asynchronously.
+   * Stores the SHA-256 hash of the generated state in google_oauth_states for durable CSRF protection.
+   */
+  public async generateAuthorizationUrlAsync(options: GoogleOAuthUrlOptions = {}): Promise<{
+    url: string;
+    state: string;
+    scope: string;
+  }> {
+    const config = this.validateConfig();
+    const state = options.state || (await this.generateStateAsync());
+
+    let scopeString: string;
+    if (options.scope) {
+      scopeString = Array.isArray(options.scope)
+        ? options.scope.join(' ')
+        : options.scope;
+    } else {
+      scopeString = (config.scopes && config.scopes.length > 0)
+        ? config.scopes.join(' ')
+        : GOOGLE_DRIVE_READONLY_SCOPE;
+    }
+
+    const params = new URLSearchParams();
+    params.set('client_id', config.clientId);
+    params.set('redirect_uri', config.redirectUri);
+    params.set('response_type', 'code');
+    params.set('scope', scopeString);
+    params.set('access_type', options.accessType || 'offline');
+    params.set('prompt', options.prompt || 'consent');
+    params.set('state', state);
+
+    if (options.includeGrantedScopes !== undefined) {
+      params.set('include_granted_scopes', String(options.includeGrantedScopes));
+    }
+    if (options.loginHint) {
+      params.set('login_hint', options.loginHint);
+    }
+
+    const url = `${GOOGLE_OAUTH_AUTH_ENDPOINT}?${params.toString()}`;
+
+    return {
+      url,
+      state,
+      scope: scopeString,
+    };
   }
 
   /**
@@ -410,7 +566,7 @@ export class GoogleDriveOAuthService {
     }
 
     if (options.state && options.expectedState) {
-      this.validateState(options.state, options.expectedState);
+      await this.validateState(options.state, options.expectedState);
     }
 
     const config = this.validateConfig();
@@ -729,7 +885,7 @@ export class GoogleDriveOAuthService {
     } = {}
   ): Promise<GoogleOAuthConnectionRecord> {
     if (options.state) {
-      this.validateState(options.state, options.expectedState);
+      await this.validateState(options.state, options.expectedState);
     }
 
     const tokens = await this.exchangeCodeForTokens(code, {
@@ -784,45 +940,87 @@ export class GoogleDriveOAuthService {
     };
 
     const supabase = this.getSupabase();
-    if (supabase) {
-      const { data: existingRecords } = await supabase
+    if (!supabase) {
+      throw new GoogleOAuthError(
+        'DATABASE_ERROR',
+        'Database client is unavailable. Cannot persist Google OAuth connection.',
+        503
+      );
+    }
+
+    const { data: existingRecords, error: selectError } = await supabase
+      .from('google_oauth_connections')
+      .select('id')
+      .eq('provider', 'google')
+      .limit(1);
+
+    if (selectError) {
+      throw new GoogleOAuthError(
+        'DATABASE_ERROR',
+        `Failed to query Google OAuth connections: ${selectError.message}`,
+        500
+      );
+    }
+
+    if (existingRecords && existingRecords.length > 0) {
+      const existingId = existingRecords[0].id;
+      const { data: updatedRows, error } = await supabase
         .from('google_oauth_connections')
-        .select('id')
-        .eq('provider', 'google')
-        .limit(1);
+        .update(record)
+        .eq('id', existingId)
+        .select('id');
 
-      if (existingRecords && existingRecords.length > 0) {
-        const { error } = await supabase
-          .from('google_oauth_connections')
-          .update(record)
-          .eq('id', existingRecords[0].id);
-
-        if (error) {
-          throw new GoogleOAuthError(
-            'DATABASE_ERROR',
-            `Failed to update Google OAuth connection record: ${error.message}`,
-            500
-          );
-        }
-        record.id = existingRecords[0].id;
-      } else {
-        const { data: inserted, error } = await supabase
-          .from('google_oauth_connections')
-          .insert([record])
-          .select('id')
-          .single();
-
-        if (error) {
-          throw new GoogleOAuthError(
-            'DATABASE_ERROR',
-            `Failed to store Google OAuth connection: ${error.message}`,
-            500
-          );
-        }
-        if (inserted?.id) {
-          record.id = inserted.id;
-        }
+      if (error) {
+        throw new GoogleOAuthError(
+          'DATABASE_ERROR',
+          `Failed to update Google OAuth connection record: ${error.message}`,
+          500
+        );
       }
+
+      if (!updatedRows || updatedRows.length === 0 || !updatedRows[0]?.id) {
+        throw new GoogleOAuthError(
+          'DATABASE_ERROR',
+          'Failed to confirm Google OAuth connection update: returned record or id missing.',
+          500
+        );
+      }
+
+      record.id = updatedRows[0].id;
+    } else {
+      const { data: inserted, error } = await supabase
+        .from('google_oauth_connections')
+        .insert([record])
+        .select('id')
+        .single();
+
+      if (error) {
+        throw new GoogleOAuthError(
+          'DATABASE_ERROR',
+          `Failed to store Google OAuth connection: ${error.message}`,
+          500
+        );
+      }
+
+      if (!inserted || !inserted.id) {
+        throw new GoogleOAuthError(
+          'DATABASE_ERROR',
+          'Failed to confirm Google OAuth connection persistence: returned record or id missing.',
+          500
+        );
+      }
+
+      record.id = inserted.id;
+    }
+
+    // Post-persistence verification: verify the stored record exists in database
+    const verifyRecord = await this.getStoredConnection();
+    if (!verifyRecord || !verifyRecord.id || verifyRecord.id !== record.id) {
+      throw new GoogleOAuthError(
+        'DATABASE_ERROR',
+        'Post-persistence verification failed: stored connection could not be retrieved from database.',
+        500
+      );
     }
 
     return record;
@@ -834,7 +1032,11 @@ export class GoogleDriveOAuthService {
   public async getStoredConnection(): Promise<GoogleOAuthConnectionRecord | null> {
     const supabase = this.getSupabase();
     if (!supabase) {
-      return null;
+      throw new GoogleOAuthError(
+        'DATABASE_ERROR',
+        'Database client is unavailable. Cannot query Google OAuth connection status.',
+        503
+      );
     }
 
     try {
@@ -846,8 +1048,11 @@ export class GoogleDriveOAuthService {
         .limit(1);
 
       if (error) {
-        // Table does not exist yet or connection error
-        return null;
+        throw new GoogleOAuthError(
+          'DATABASE_ERROR',
+          `Database error querying Google OAuth connection: ${error.message}`,
+          500
+        );
       }
 
       if (!data || data.length === 0) {
@@ -855,8 +1060,13 @@ export class GoogleDriveOAuthService {
       }
 
       return data[0] as GoogleOAuthConnectionRecord;
-    } catch {
-      return null;
+    } catch (err: any) {
+      if (err instanceof GoogleOAuthError) throw err;
+      throw new GoogleOAuthError(
+        'DATABASE_ERROR',
+        `Database query failed: ${err.message || String(err)}`,
+        500
+      );
     }
   }
 

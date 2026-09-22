@@ -132,12 +132,12 @@ async function runStep22CTests() {
     assert(typeof state === 'string' && state.length === 64, 'State is a 64-char hex string');
 
     // Validating against identical state passes
-    service.validateState(state, state);
+    await service.validateState(state, state);
 
     // Mismatch fails
     let threwMismatch = false;
     try {
-      service.validateState('wrong-state-00000000000000000000000000000000000000000000000000000000', state);
+      await service.validateState('wrong-state-00000000000000000000000000000000000000000000000000000000', state);
     } catch (err: any) {
       threwMismatch = true;
       assert(err.code === 'STATE_MISMATCH', 'Throws STATE_MISMATCH on mismatch');
@@ -477,6 +477,338 @@ async function runStep22CTests() {
     recordPass('8. Static security invariants: RLS enforced, zero browser automation, zero leaked secrets');
   } catch (err) {
     recordFail('8. Security invariants', err);
+  }
+
+  // -------------------------------------------------------------
+  // Test 9: Durable State Management & Atomic Replay Protection (Step 22C-B)
+  // -------------------------------------------------------------
+  try {
+    const mockStateTable: Array<{
+      id: string;
+      state_hash: string;
+      expires_at: string;
+      consumed_at: string | null;
+      created_at: string;
+    }> = [];
+
+    const mockSupabaseStates = {
+      from: (table: string) => {
+        if (table === 'google_oauth_states') {
+          return {
+            insert: async (rows: any[]) => {
+              for (const r of rows) {
+                mockStateTable.push({
+                  id: `uuid-${mockStateTable.length + 1}`,
+                  state_hash: r.state_hash,
+                  expires_at: r.expires_at,
+                  consumed_at: null,
+                  created_at: new Date().toISOString(),
+                });
+              }
+              return { data: rows, error: null };
+            },
+            delete: () => ({
+              lt: async () => ({ error: null }),
+            }),
+            update: (updateFields: any) => ({
+              eq: (col: string, val: any) => ({
+                is: (isCol: string, isVal: any) => ({
+                  gt: (gtCol: string, gtVal: any) => ({
+                    select: async () => {
+                      const matching = mockStateTable.find(
+                        (r) =>
+                          r.state_hash === val &&
+                          r.consumed_at === isVal &&
+                          new Date(r.expires_at) > new Date(gtVal)
+                      );
+                      if (matching) {
+                        Object.assign(matching, updateFields);
+                        return { data: [matching], error: null };
+                      }
+                      return { data: [], error: null };
+                    },
+                  }),
+                }),
+              }),
+            }),
+            select: () => ({
+              eq: (col: string, val: any) => ({
+                limit: async () => {
+                  const rows = mockStateTable.filter((r) => r.state_hash === val);
+                  return { data: rows, error: null };
+                },
+              }),
+            }),
+          };
+        }
+        return {
+          select: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }),
+        };
+      },
+    };
+
+    const durableService = new GoogleDriveOAuthService({
+      config: {
+        clientId: 'mock-client-id',
+        clientSecret: 'mock-client-secret',
+        redirectUri: 'https://www.hemantkrkushwaha.com/api/auth/google/callback',
+      },
+      supabaseClient: mockSupabaseStates,
+    });
+
+    // 1. Generate state asynchronously and verify storage of SHA-256 hash (never raw state)
+    const rawState = await durableService.generateStateAsync();
+    assert(rawState.length === 64, 'Raw state is 64 hex characters');
+    const expectedHash = crypto.createHash('sha256').update(rawState).digest('hex');
+    assert(mockStateTable.length === 1, 'One state persisted in google_oauth_states');
+    assert(mockStateTable[0].state_hash === expectedHash, 'Stored value is SHA-256 hash, NOT raw state');
+    assert(!JSON.stringify(mockStateTable).includes(rawState), 'Raw state is NEVER persisted in database');
+
+    // 2. Validate state once (first arrival succeeds and marks consumed_at)
+    await durableService.validateState(rawState);
+    assert(mockStateTable[0].consumed_at !== null, 'State record was atomically consumed');
+
+    // 3. Second validation attempt must be rejected as REPLAY
+    let replayRejected = false;
+    try {
+      await durableService.validateState(rawState);
+    } catch (err: any) {
+      replayRejected = true;
+      assert(err.code === 'INVALID_STATE', 'Throws INVALID_STATE on replay');
+      assert(err.message.includes('already been used') || err.message.includes('Replay attempt rejected'), 'Clear replay rejection message');
+    }
+    assert(replayRejected, 'Replay attempt was successfully rejected');
+
+    // 4. Verification of migration invariants
+    const migrationFile = fs.readFileSync(
+      path.join(process.cwd(), 'supabase/migrations/20260921010000_google_oauth_states.sql'),
+      'utf8'
+    );
+    assert(migrationFile.includes('CREATE TABLE IF NOT EXISTS google_oauth_states'), 'Migration creates google_oauth_states');
+    assert(migrationFile.includes('ENABLE ROW LEVEL SECURITY'), 'Migration enables RLS');
+    assert(migrationFile.includes('TO service_role'), 'Grants access to service_role');
+    assert(migrationFile.includes('REVOKE ALL ON TABLE google_oauth_states FROM anon'), 'Revokes access from anon');
+
+    recordPass('9. Durable OAuth state: SHA-256 hashing, atomic consumption, replay rejection, and RLS');
+  } catch (err) {
+    recordFail('9. Durable state management', err);
+  }
+
+  // -------------------------------------------------------------
+  // Test 10: Mandatory Persistent OAuth Connection Invariants
+  // -------------------------------------------------------------
+  try {
+    const validTokensHttpClient = async () => ({
+      status: 200,
+      data: {
+        access_token: 'mock-access-token',
+        token_type: 'Bearer',
+        expires_in: 3600,
+        refresh_token: 'mock-refresh-token',
+        scope: GOOGLE_DRIVE_READONLY_SCOPE,
+      },
+    });
+
+    // Subtest A: Database client unavailable -> DATABASE_ERROR (503)
+    let dbUnavailableFailedFast = false;
+    const serviceNoDb = new GoogleDriveOAuthService({
+      config: {
+        clientId: 'mock-client-id',
+        clientSecret: 'mock-client-secret',
+        redirectUri: 'https://www.hemantkrkushwaha.com/api/auth/google/callback',
+      },
+      encryptionKey: testKeyHex,
+      httpClient: validTokensHttpClient,
+      supabaseClient: null, // Explicit null database client
+    });
+
+    try {
+      await serviceNoDb.exchangeAndStoreConnection('valid-code');
+    } catch (err: any) {
+      dbUnavailableFailedFast = true;
+      assert(err instanceof GoogleOAuthError, 'Throws GoogleOAuthError on missing DB');
+      assert(err.code === 'DATABASE_ERROR', 'Error code is DATABASE_ERROR');
+      assert(err.statusCode === 503, 'HTTP status is 503 Service Unavailable');
+      assert(err.message.includes('Database client is unavailable'), 'Clear failure message');
+    }
+    assert(dbUnavailableFailedFast, 'exchangeAndStoreConnection fails fast with 503 when DB is null');
+
+    // Subtest B: Database INSERT failure -> DATABASE_ERROR (500)
+    let dbInsertFailureHandled = false;
+    const mockSupabaseInsertError = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            limit: async () => ({ data: [], error: null }),
+          }),
+        }),
+        insert: () => ({
+          select: () => ({
+            single: async () => ({ data: null, error: { message: 'relation google_oauth_connections does not exist' } }),
+          }),
+        }),
+      }),
+    };
+
+    const serviceInsertFail = new GoogleDriveOAuthService({
+      config: {
+        clientId: 'mock-client-id',
+        clientSecret: 'mock-client-secret',
+        redirectUri: 'https://www.hemantkrkushwaha.com/api/auth/google/callback',
+      },
+      encryptionKey: testKeyHex,
+      httpClient: validTokensHttpClient,
+      supabaseClient: mockSupabaseInsertError,
+    });
+
+    try {
+      await serviceInsertFail.exchangeAndStoreConnection('valid-code');
+    } catch (err: any) {
+      dbInsertFailureHandled = true;
+      assert(err.code === 'DATABASE_ERROR', 'Error code is DATABASE_ERROR on insert error');
+      assert(err.message.includes('relation google_oauth_connections does not exist'), 'Includes Postgres error detail');
+    }
+    assert(dbInsertFailureHandled, 'Database INSERT error throws DATABASE_ERROR');
+
+    // Subtest C: Database UPDATE failure -> DATABASE_ERROR (500)
+    let dbUpdateFailureHandled = false;
+    const mockSupabaseUpdateError = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            limit: async () => ({ data: [{ id: 'existing-id-123' }], error: null }),
+          }),
+        }),
+        update: () => ({
+          eq: () => ({
+            select: async () => ({ data: null, error: { message: 'connection timeout' } }),
+          }),
+        }),
+      }),
+    };
+
+    const serviceUpdateFail = new GoogleDriveOAuthService({
+      config: {
+        clientId: 'mock-client-id',
+        clientSecret: 'mock-client-secret',
+        redirectUri: 'https://www.hemantkrkushwaha.com/api/auth/google/callback',
+      },
+      encryptionKey: testKeyHex,
+      httpClient: validTokensHttpClient,
+      supabaseClient: mockSupabaseUpdateError,
+    });
+
+    try {
+      await serviceUpdateFail.exchangeAndStoreConnection('valid-code');
+    } catch (err: any) {
+      dbUpdateFailureHandled = true;
+      assert(err.code === 'DATABASE_ERROR', 'Error code is DATABASE_ERROR on update error');
+      assert(err.message.includes('connection timeout'), 'Includes Postgres error detail');
+    }
+    assert(dbUpdateFailureHandled, 'Database UPDATE error throws DATABASE_ERROR');
+
+    // Subtest D: Database INSERT succeeds but returned row / id missing -> DATABASE_ERROR
+    let dbMissingIdHandled = false;
+    const mockSupabaseMissingId = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            limit: async () => ({ data: [], error: null }),
+          }),
+        }),
+        insert: () => ({
+          select: () => ({
+            single: async () => ({ data: null, error: null }),
+          }),
+        }),
+      }),
+    };
+
+    const serviceMissingId = new GoogleDriveOAuthService({
+      config: {
+        clientId: 'mock-client-id',
+        clientSecret: 'mock-client-secret',
+        redirectUri: 'https://www.hemantkrkushwaha.com/api/auth/google/callback',
+      },
+      encryptionKey: testKeyHex,
+      httpClient: validTokensHttpClient,
+      supabaseClient: mockSupabaseMissingId,
+    });
+
+    try {
+      await serviceMissingId.exchangeAndStoreConnection('valid-code');
+    } catch (err: any) {
+      dbMissingIdHandled = true;
+      assert(err.code === 'DATABASE_ERROR', 'Throws DATABASE_ERROR when returned record or id missing');
+      assert(err.message.includes('missing'), 'Clear error about missing id');
+    }
+    assert(dbMissingIdHandled, 'Missing returned id throws DATABASE_ERROR');
+
+    // Subtest E: connection-status with DB unavailable -> throws DATABASE_ERROR / 503 (NOT connected: false)
+    let connectionStatusDbUnavailableThrows = false;
+    try {
+      await serviceNoDb.getSafeConnectionStatus();
+    } catch (err: any) {
+      connectionStatusDbUnavailableThrows = true;
+      assert(err.code === 'DATABASE_ERROR', 'connection-status throws DATABASE_ERROR when DB unavailable');
+      assert(err.statusCode === 503, 'connection-status returns 503 when DB unavailable');
+    }
+    assert(connectionStatusDbUnavailableThrows, 'connection-status throws 503 on unavailable DB rather than returning connected:false');
+
+    // Subtest F: connection-status with zero rows -> connected: false
+    const mockSupabaseZeroRows = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: async () => ({ data: [], error: null }),
+            }),
+          }),
+        }),
+      }),
+    };
+    const serviceZeroRows = new GoogleDriveOAuthService({
+      encryptionKey: testKeyHex,
+      supabaseClient: mockSupabaseZeroRows,
+    });
+    const statusZero = await serviceZeroRows.getSafeConnectionStatus();
+    assert(statusZero.connected === false, 'Returns connected: false when zero rows in table');
+    assert(statusZero.provider === 'google', 'Provider is google');
+
+    // Subtest G: connection-status with one row -> connected: true
+    const mockSupabaseOneRow = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: async () => ({
+                data: [{
+                  id: 'persisted-123',
+                  provider: 'google',
+                  email: 'scholar@domain.org',
+                  scope: GOOGLE_DRIVE_READONLY_SCOPE,
+                  expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+                  updated_at: new Date().toISOString(),
+                }],
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      }),
+    };
+    const serviceOneRow = new GoogleDriveOAuthService({
+      encryptionKey: testKeyHex,
+      supabaseClient: mockSupabaseOneRow,
+    });
+    const statusOne = await serviceOneRow.getSafeConnectionStatus();
+    assert(statusOne.connected === true, 'Returns connected: true when 1 row in table');
+    assert(statusOne.email === 'scholar@domain.org', 'Reports account email safely');
+    assert(statusOne.scope === GOOGLE_DRIVE_READONLY_SCOPE, 'Reports scope safely');
+
+    recordPass('10. Mandatory persistent connection: fail-fast on unavailable DB, confirmed write, and safe status');
+  } catch (err) {
+    recordFail('10. Mandatory persistence invariants', err);
   }
 
   console.log('================================================================');

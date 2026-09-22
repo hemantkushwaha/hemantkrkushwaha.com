@@ -88,10 +88,10 @@ googleAuthRouter.get('/status', (req: Request, res: Response) => {
  * GET /api/auth/google/url
  * Generates the official Google OAuth 2.0 authorization URL.
  */
-googleAuthRouter.get('/url', (req: Request, res: Response) => {
+googleAuthRouter.get('/url', async (req: Request, res: Response) => {
   try {
     const state = typeof req.query.state === 'string' ? req.query.state : undefined;
-    const authUrlData = googleDriveOAuthService.generateAuthorizationUrl({
+    const authUrlData = await googleDriveOAuthService.generateAuthorizationUrlAsync({
       state,
       accessType: 'offline',
       prompt: 'consent',
@@ -196,9 +196,11 @@ googleAuthRouter.get('/connection-status', async (req: Request, res: Response) =
       ...status,
     });
   } catch (err: any) {
-    res.status(500).json({
+    const statusCode = typeof err.statusCode === 'number' ? err.statusCode : 500;
+    const errorCode = err.code || 'CONNECTION_STATUS_FAILED';
+    res.status(statusCode).json({
       success: false,
-      error: 'CONNECTION_STATUS_FAILED',
+      error: errorCode,
       message: err.message || 'Failed to retrieve connection status.',
     });
   }

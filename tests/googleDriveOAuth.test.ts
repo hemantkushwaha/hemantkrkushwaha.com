@@ -177,7 +177,7 @@ async function runOAuthTests() {
     });
     let thrownError: any = null;
     try {
-      oauthService.validateState('state-attack-999', 'state-expected-123');
+      await oauthService.validateState('state-attack-999', 'state-expected-123');
     } catch (err) {
       thrownError = err;
     }
@@ -187,7 +187,7 @@ async function runOAuthTests() {
     // Matching state passes without throwing
     let passedMatch = true;
     try {
-      oauthService.validateState('valid-secure-state-abc', 'valid-secure-state-abc');
+      await oauthService.validateState('valid-secure-state-abc', 'valid-secure-state-abc');
     } catch {
       passedMatch = false;
     }
@@ -306,7 +306,7 @@ async function runOAuthTests() {
     // Cause a state mismatch error
     let errorString = '';
     try {
-      oauthService.validateState('a', 'b');
+      await oauthService.validateState('a', 'b');
     } catch (err: any) {
       errorString = err.message + ' ' + JSON.stringify(err);
     }

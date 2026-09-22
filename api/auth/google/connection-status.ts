@@ -28,9 +28,11 @@ export default async function handler(req: any, res: any) {
       ...status,
     });
   } catch (err: any) {
-    return res.status(500).json({
+    const statusCode = typeof err.statusCode === 'number' ? err.statusCode : 500;
+    const errorCode = err.code || 'CONNECTION_STATUS_FAILED';
+    return res.status(statusCode).json({
       success: false,
-      error: 'CONNECTION_STATUS_FAILED',
+      error: errorCode,
       message: err.message || 'Failed to retrieve Google Drive connection status.',
     });
   }

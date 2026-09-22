@@ -217,6 +217,18 @@ export interface GoogleOAuthConnectionRecord {
 }
 
 /**
+ * Step 22C-B: Durable Google OAuth State Record for CSRF and replay protection.
+ * Raw state is NEVER stored; only cryptographic SHA-256 hash is persisted.
+ */
+export interface GoogleOAuthStateRecord {
+  id?: string;
+  state_hash: string;
+  expires_at: string;
+  consumed_at?: string | null;
+  created_at?: string;
+}
+
+/**
  * Safe connection status metadata returned to callers.
  * Guaranteed to NEVER leak access_token, refresh_token, client_secret, or encryption key.
  */

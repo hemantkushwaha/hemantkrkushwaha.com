@@ -7,6 +7,10 @@ import { PhilosophyPage } from './pages/PhilosophyPage';
 import { WritingsPage } from './pages/WritingsPage';
 import { AboutPage } from './pages/AboutPage';
 import { ContentDetailPage } from './pages/ContentDetailPage';
+import { LecturesPage } from './pages/academics/LecturesPage';
+import { SubjectPage } from './pages/academics/SubjectPage';
+import { UnitPage } from './pages/academics/UnitPage';
+import { TopicPage } from './pages/academics/TopicPage';
 import { Container } from './components/common/Container';
 import { Compass } from 'lucide-react';
 
@@ -18,6 +22,37 @@ function PageRouter() {
     const rawSlug = path.slice('/content/'.length).split('/')[0]?.trim();
     if (rawSlug) {
       return <ContentDetailPage slug={rawSlug} key={rawSlug} />;
+    }
+  }
+
+  // Academic Lectures hierarchy: /academics/lectures(/...)
+  if (path === '/academics/lectures') {
+    return <LecturesPage />;
+  }
+
+  if (path.startsWith('/academics/lectures/')) {
+    const subPath = path.slice('/academics/lectures/'.length);
+    const segments = subPath.split('/').filter(Boolean);
+
+    if (segments.length === 1) {
+      return <SubjectPage subjectSlug={segments[0]} key={segments[0]} />;
+    } else if (segments.length === 2) {
+      return (
+        <UnitPage
+          subjectSlug={segments[0]}
+          unitSlug={segments[1]}
+          key={`${segments[0]}-${segments[1]}`}
+        />
+      );
+    } else if (segments.length === 3) {
+      return (
+        <TopicPage
+          subjectSlug={segments[0]}
+          unitSlug={segments[1]}
+          topicSlug={segments[2]}
+          key={`${segments[0]}-${segments[1]}-${segments[2]}`}
+        />
+      );
     }
   }
 

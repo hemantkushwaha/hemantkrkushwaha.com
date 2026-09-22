@@ -32,6 +32,10 @@ async function runRoutingTests() {
   const frontendRoutes = [
     '/',
     '/academics',
+    '/academics/lectures',
+    '/academics/lectures/computer-networks',
+    '/academics/lectures/computer-networks/transport-layer',
+    '/academics/lectures/computer-networks/transport-layer/tcp',
     '/research',
     '/philosophy',
     '/writings',

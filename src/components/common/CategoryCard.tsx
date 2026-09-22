@@ -1,6 +1,7 @@
-import { FolderGit2 } from 'lucide-react';
+import { FolderGit2, ArrowRight } from 'lucide-react';
 import { Card } from './Card';
 import { CategoryItem } from '../../config/categories';
+import { Link } from '../../router/RouterContext';
 
 interface CategoryCardProps {
   key?: string;
@@ -8,6 +9,8 @@ interface CategoryCardProps {
 }
 
 export function CategoryCard({ category }: CategoryCardProps) {
+  const isLive = category.targetUrl === '/academics/lectures';
+
   return (
     <article
       id={`cat-${category.id}`}
@@ -22,7 +25,16 @@ export function CategoryCard({ category }: CategoryCardProps) {
                 {category.targetUrl}
               </span>
               <h3 className="font-serif text-xl sm:text-2xl font-medium text-stone-950">
-                {category.title}
+                {isLive ? (
+                  <Link
+                    href={category.targetUrl}
+                    className="hover:text-stone-700 transition-colors"
+                  >
+                    {category.title}
+                  </Link>
+                ) : (
+                  category.title
+                )}
               </h3>
             </div>
             <div className="p-2 rounded-lg bg-stone-100 text-stone-700 shrink-0">
@@ -44,14 +56,25 @@ export function CategoryCard({ category }: CategoryCardProps) {
           </div>
         </div>
 
-        {/* Empty state / structural preparation footer */}
+        {/* Footer */}
         <div className="pt-5 mt-6 border-t border-stone-100 flex items-center justify-between text-xs text-stone-500">
-          <span className="font-medium text-stone-400">
-            Structure Ready
+          <span className={`font-medium ${isLive ? 'text-emerald-700' : 'text-stone-400'}`}>
+            {isLive ? 'Live Navigation Available' : 'Structure Ready'}
           </span>
-          <span className="text-stone-400 italic">
-            Content pending
-          </span>
+          {isLive ? (
+            <Link
+              id="link-explore-lectures"
+              href={category.targetUrl}
+              className="inline-flex items-center gap-1 font-medium text-stone-900 hover:text-stone-600 transition-colors"
+            >
+              <span>Explore</span>
+              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+            </Link>
+          ) : (
+            <span className="text-stone-400 italic">
+              Content pending
+            </span>
+          )}
         </div>
       </Card>
     </article>

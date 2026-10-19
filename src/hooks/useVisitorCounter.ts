@@ -5,11 +5,12 @@
  * Architecture: Visitor Counter Hook (Feature 2)
  * 
  * Safety & Resilience Guarantees:
- * 1. Counts once per browser session via sessionStorage check.
- * 2. Repeated clock ticks and component re-renders NEVER inflate counts.
- * 3. Never sends personal data, GPS, or tracking metrics.
- * 4. Gracefully handles network or backend failures without crashing.
- * 5. Accurately reports zero/initial counts without fabricating numbers.
+ * 1. Counts once per browser session via client-side sessionStorage check.
+ * 2. Strict session token format conforms to ^sess_[a-zA-Z0-9_-]{8,64}$.
+ * 3. Decoupled from clock ticks and component re-renders (never inflates counts).
+ * 4. Never sends personal data, GPS, or tracking metrics.
+ * 5. Gracefully handles network or backend failures without crashing.
+ * 6. Accurately reports zero/initial counts without fabricating numbers.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -19,22 +20,22 @@ export interface VisitorCounterState {
   todayVisits: number | null;
   loading: boolean;
   error: string | null;
-  storageType: 'database' | 'memory' | null;
+  storageType: 'database' | 'memory' | 'unavailable' | null;
   notice?: string;
   refetch: () => Promise<void>;
 }
 
 const SESSION_STORAGE_KEY = 'hk_visitor_session_recorded_v1';
 
-function getOrCreateSessionToken(): string {
+export function getOrCreateSessionToken(): string {
   try {
     const existing = sessionStorage.getItem(SESSION_STORAGE_KEY);
-    if (existing) return existing;
+    if (existing && existing.startsWith('sess_')) return existing;
 
     const newToken = 'sess_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now().toString(36);
     return newToken;
   } catch {
-    return 'fallback_session';
+    return 'sess_fallback_' + Date.now().toString(36);
   }
 }
 
@@ -43,7 +44,7 @@ export function useVisitorCounter(): VisitorCounterState {
   const [todayVisits, setTodayVisits] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [storageType, setStorageType] = useState<'database' | 'memory' | null>(null);
+  const [storageType, setStorageType] = useState<'database' | 'memory' | 'unavailable' | null>(null);
   const [notice, setNotice] = useState<string | undefined>(undefined);
 
   // Guard to guarantee execution only once on mount, regardless of parent re-renders or StrictMode
@@ -53,7 +54,7 @@ export function useVisitorCounter(): VisitorCounterState {
     try {
       const res = await fetch('/api/visits/stats');
       if (!res.ok) {
-        throw new Error(`Failed to fetch visitor stats (${res.status})`);
+        throw new Error(`Visitor stats returned ${res.status}`);
       }
       const data = await res.json();
       if (data && typeof data.totalVisits === 'number') {
@@ -62,6 +63,9 @@ export function useVisitorCounter(): VisitorCounterState {
         setStorageType(data.storageType || 'memory');
         setNotice(data.message);
         setError(null);
+      } else if (data && data.storageType === 'unavailable') {
+        setStorageType('unavailable');
+        setError(data.message || 'Visitor counter is temporarily unavailable');
       }
     } catch (err: any) {
       console.warn('[VisitorCounter] Error fetching visitor stats:', err);
@@ -113,6 +117,9 @@ export function useVisitorCounter(): VisitorCounterState {
         } catch {
           // ignore
         }
+      } else if (data && data.storageType === 'unavailable') {
+        setStorageType('unavailable');
+        setError(data.message || 'Visitor counter is temporarily unavailable');
       }
     } catch (err: any) {
       console.warn('[VisitorCounter] Error recording session:', err);

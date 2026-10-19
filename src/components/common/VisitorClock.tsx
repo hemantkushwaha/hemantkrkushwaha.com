@@ -80,11 +80,6 @@ export function VisitorClock({ variant = 'full', className = '' }: VisitorClockP
         >
           {formattedTime}
         </span>
-        {isDstActive && (
-          <span className="text-[11px] text-stone-500 font-sans" title="Daylight Saving Time is currently active in this timezone">
-            (DST)
-          </span>
-        )}
       </div>
 
       {/* Timezone Details */}

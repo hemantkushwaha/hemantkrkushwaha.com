@@ -4,36 +4,57 @@
  * Hemant Kumar Kushwaha Knowledge Platform (hemantkrkushwaha.com)
  * Architecture: Privacy-Conscious Visitor Counting
  * 
- * Guarantees:
- * 1. Server-authoritative: Clients cannot dictate arbitrary counter values.
- * 2. Privacy-first: Zero IP addresses, zero GPS coordinates, zero user-agent logs.
- * 3. Session deduplication: Consecutive requests from the same visitor session
- *    within a sliding window are ignored and do not inflate counts.
- * 4. Graceful resilience: If Supabase connection is pending migration or
- *    temporarily unreachable, the service operates seamlessly using an
- *    in-memory runtime counter without breaking the website.
+ * Guarantees & Constraints:
+ * 1. Production Authority: Supabase PostgreSQL is the sole authoritative store in production.
+ *    In-memory fallback is restricted strictly to local development and deterministic tests.
+ * 2. Privacy-first: Zero IP addresses, zero GPS coordinates, zero user-agent logs, zero fingerprinting.
+ * 3. Session validation: Validates session token format strictly; requests with missing
+ *    or invalid tokens are rejected and never increment the counter.
+ * 4. Deduplication & Distributed Abuse Boundaries:
+ *    - Client-side: sessionStorage prevents repeat invocations from standard browser navigation.
+ *    - Server-side (local container / dev instance): in-memory sliding-window cache suppresses duplicate requests.
+ *    - Distributed Serverless Limitation: Independent Vercel Lambdas execute in isolated, ephemeral runtimes.
+ *      In-memory caches are not shared across distributed serverless instances.
+ *    - Security Realism: Origin, Referer, Sec-Fetch-Site headers, and client-generated session IDs
+ *      do NOT provide cryptographically strong protection against deliberate automated abuse, as any custom
+ *      script, curl command, or bot can synthesize unique session tokens and forge HTTP headers.
+ *    - Safest Practical Next Step for High-Traffic / Bot Defense: An edge rate-limiting layer with
+ *      distributed state (such as Upstash Redis with token-bucket algorithm or Cloudflare Turnstile /
+ *      WAF bot protection) at the reverse proxy layer, rather than unbounded relational database table writes.
+ * 5. Global Daily Semantics: Canonical daily counting rolls over at 00:00:00 UTC.
  */
 
 import { getServerSupabaseClient } from '../lib/supabaseServer.js';
 
 export interface VisitorStatsResult {
   success: boolean;
-  totalVisits: number;
-  todayVisits: number;
+  totalVisits: number | null;
+  todayVisits: number | null;
   recorded?: boolean;
   isDatabaseConnected: boolean;
-  storageType: 'database' | 'memory';
+  storageType: 'database' | 'memory' | 'unavailable';
   message?: string;
+  error?: string;
 }
 
-// In-memory runtime fallback storage
+// Session token format requirement: "sess_" followed by 8 to 64 alphanumeric or underscore characters
+export const SESSION_TOKEN_REGEX = /^sess_[a-zA-Z0-9_-]{8,64}$/;
+
+/**
+ * Validates whether the supplied session ID satisfies token format requirements.
+ */
+export function isValidSessionId(sessionId: unknown): sessionId is string {
+  return typeof sessionId === 'string' && SESSION_TOKEN_REGEX.test(sessionId);
+}
+
+// In-memory runtime store (strictly for local development / testing)
 class InMemoryVisitorStore {
   private totalVisits: number = 0;
   private dailyVisits: Map<string, number> = new Map();
   private recentSessions: Map<string, number> = new Map(); // sessionId -> timestamp
   private readonly SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
-  private getTodayDateKey(): string {
+  public getTodayDateKey(): string {
     return new Date().toISOString().slice(0, 10); // YYYY-MM-DD in UTC
   }
 
@@ -53,15 +74,12 @@ class InMemoryVisitorStore {
     return Boolean(lastSeen && Date.now() - lastSeen < this.SESSION_TTL_MS);
   }
 
-  public recordSession(sessionId?: string): boolean {
-    if (sessionId && this.isSessionRecent(sessionId)) {
+  public recordSession(sessionId: string): boolean {
+    if (this.isSessionRecent(sessionId)) {
       return false; // Already recorded recently
     }
 
-    if (sessionId) {
-      this.recentSessions.set(sessionId, Date.now());
-    }
-
+    this.recentSessions.set(sessionId, Date.now());
     this.totalVisits += 1;
     const todayKey = this.getTodayDateKey();
     const currentToday = this.dailyVisits.get(todayKey) || 0;
@@ -88,29 +106,42 @@ export const inMemoryVisitorStore = new InMemoryVisitorStore();
 
 /**
  * Records a visitor session server-side.
- * Increments visitor count if session has not been counted in the current session window.
+ * In production: Supabase PostgreSQL is strictly authoritative.
+ * In development: In-memory store is used if Supabase is unconfigured.
  */
-export async function recordVisit(sessionId?: string): Promise<VisitorStatsResult> {
-  const supabase = getServerSupabaseClient();
-  const todayDateStr = new Date().toISOString().slice(0, 10);
+export async function recordVisit(sessionId?: unknown): Promise<VisitorStatsResult> {
+  // 1. Strict validation: Reject missing or malformed session tokens immediately
+  if (!isValidSessionId(sessionId)) {
+    return {
+      success: false,
+      totalVisits: null,
+      todayVisits: null,
+      recorded: false,
+      isDatabaseConnected: false,
+      storageType: 'unavailable',
+      error: 'Invalid or missing session token format. Expected pattern: ^sess_[a-zA-Z0-9_-]{8,64}$',
+    };
+  }
 
-  // If Supabase is available, attempt to record to database
+  const isProduction = process.env.NODE_ENV === 'production';
+  const supabase = getServerSupabaseClient();
+  const todayDateStr = new Date().toISOString().slice(0, 10); // Standard UTC date boundary
+
+  // 2. Database path (authoritative)
   if (supabase) {
     try {
-      // Check server-side session deduplication cache before executing DB increment
-      if (sessionId && inMemoryVisitorStore.isSessionRecent(sessionId)) {
+      // Local instance cache check to prevent rapid repeated DB round-trips
+      if (inMemoryVisitorStore.isSessionRecent(sessionId)) {
         return getVisitStats();
       }
 
-      // Call database stored procedure
+      // Call database stored procedure with service_role privileges
       const { data, error } = await supabase.rpc('increment_site_visit', {
         target_date: todayDateStr,
       });
 
       if (!error && data && data.length > 0) {
-        if (sessionId) {
-          inMemoryVisitorStore.recordSession(sessionId);
-        }
+        inMemoryVisitorStore.recordSession(sessionId);
 
         const row = data[0];
         return {
@@ -121,13 +152,29 @@ export async function recordVisit(sessionId?: string): Promise<VisitorStatsResul
           isDatabaseConnected: true,
           storageType: 'database',
         };
+      } else if (error) {
+        console.warn('[VisitorCounter] Supabase RPC error:', error.message);
       }
     } catch (err) {
-      console.warn('[VisitorCounter] Supabase RPC failed, falling back to memory counter:', err);
+      console.warn('[VisitorCounter] Supabase RPC exception:', err);
     }
   }
 
-  // Fallback to in-memory runtime store
+  // 3. Production safety guard:
+  // If Supabase is unavailable in production, refuse to fabricate or display volatile in-memory numbers.
+  if (isProduction) {
+    return {
+      success: false,
+      totalVisits: null,
+      todayVisits: null,
+      recorded: false,
+      isDatabaseConnected: false,
+      storageType: 'unavailable',
+      message: 'Visitor counter is temporarily unavailable.',
+    };
+  }
+
+  // 4. Local development / test fallback ONLY
   const recorded = inMemoryVisitorStore.recordSession(sessionId);
   const stats = inMemoryVisitorStore.getStats();
 
@@ -139,8 +186,8 @@ export async function recordVisit(sessionId?: string): Promise<VisitorStatsResul
     isDatabaseConnected: false,
     storageType: 'memory',
     message: supabase
-      ? 'Database migration pending approval. Operating with session-authoritative tracking.'
-      : 'Supabase credentials not configured. Operating with session-authoritative tracking.',
+      ? 'Database migration pending approval. Operating in local development fallback.'
+      : 'Supabase credentials not configured. Operating in local development fallback.',
   };
 }
 
@@ -148,6 +195,7 @@ export async function recordVisit(sessionId?: string): Promise<VisitorStatsResul
  * Retrieves the current visitor stats without incrementing the count.
  */
 export async function getVisitStats(): Promise<VisitorStatsResult> {
+  const isProduction = process.env.NODE_ENV === 'production';
   const supabase = getServerSupabaseClient();
   const todayDateStr = new Date().toISOString().slice(0, 10);
 
@@ -168,10 +216,23 @@ export async function getVisitStats(): Promise<VisitorStatsResult> {
         };
       }
     } catch (err) {
-      console.warn('[VisitorCounter] Supabase stats query failed, falling back to memory counter:', err);
+      console.warn('[VisitorCounter] Supabase stats query failed:', err);
     }
   }
 
+  // If in production and database is unavailable, report truthfully
+  if (isProduction) {
+    return {
+      success: false,
+      totalVisits: null,
+      todayVisits: null,
+      isDatabaseConnected: false,
+      storageType: 'unavailable',
+      message: 'Visitor statistics are temporarily unavailable.',
+    };
+  }
+
+  // Local development fallback
   const stats = inMemoryVisitorStore.getStats();
   return {
     success: true,
@@ -180,7 +241,7 @@ export async function getVisitStats(): Promise<VisitorStatsResult> {
     isDatabaseConnected: false,
     storageType: 'memory',
     message: supabase
-      ? 'Database migration pending approval. Operating with session-authoritative tracking.'
-      : 'Supabase credentials not configured. Operating with session-authoritative tracking.',
+      ? 'Database migration pending approval. Operating in local development fallback.'
+      : 'Supabase credentials not configured. Operating in local development fallback.',
   };
 }

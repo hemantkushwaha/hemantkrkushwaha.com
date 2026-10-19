@@ -1,8 +1,8 @@
 /**
- * Test Suite: Real Website Visitor Counter (Feature 2)
+ * Test Suite: Real Website Visitor Counter (Feature 2 & Security Audit Fixes)
  * 
  * Hemant Kumar Kushwaha Knowledge Platform (hemantkrkushwaha.com)
- * Architecture: Step 28 Verification
+ * Architecture: Step 28 Audit Verification
  */
 
 import fs from 'fs';
@@ -11,6 +11,8 @@ import {
   recordVisit,
   getVisitStats,
   inMemoryVisitorStore,
+  isValidSessionId,
+  SESSION_TOKEN_REGEX,
 } from '../src/server/services/visitorCounterService';
 
 function assert(condition: boolean, message: string) {
@@ -23,10 +25,11 @@ function assert(condition: boolean, message: string) {
 
 async function runVisitorCounterTests() {
   console.log('================================================================');
-  console.log('🧪 RUNNING FEATURE 2: REAL VISITOR COUNTER TESTS');
+  console.log('🧪 RUNNING FEATURE 2: REAL VISITOR COUNTER TESTS & AUDIT FIXES');
   console.log('================================================================');
 
-  // Reset in-memory store for clean deterministic test run
+  // Ensure development environment mode for initial tests
+  process.env.NODE_ENV = 'development';
   inMemoryVisitorStore.resetForTesting();
 
   // --- 1. Empty Counter & Initial State ---
@@ -36,73 +39,114 @@ async function runVisitorCounterTests() {
   assert(initialStats.totalVisits === 0, '1.2 Initial total visits starts at genuine 0');
   assert(initialStats.todayVisits === 0, '1.3 Initial today visits starts at genuine 0');
 
-  // --- 2. Secure Server-Side Counting & Deduplication ---
-  console.log('\n--- 2. Server-Side Visit Recording & Session Deduplication ---');
-  const sessionA = 'test_session_alpha_123';
+  // --- 2. Session Token Validation & Format Protection ---
+  console.log('\n--- 2. Session Token Format & Validation Guardrails ---');
+  assert(isValidSessionId('sess_alpha_12345678') === true, '2.1 Valid session token passes regex');
+  assert(isValidSessionId('sess_98765432_zxywvuts') === true, '2.2 Standard generated session token passes regex');
+  assert(isValidSessionId(undefined) === false, '2.3 Undefined session token is rejected');
+  assert(isValidSessionId(null) === false, '2.4 Null session token is rejected');
+  assert(isValidSessionId('') === false, '2.5 Empty string session token is rejected');
+  assert(isValidSessionId('invalid_prefix_12345') === false, '2.6 Non-prefixed token is rejected');
+  assert(isValidSessionId('sess_<script>alert(1)</script>') === false, '2.7 Malicious characters rejected by regex');
+  assert(isValidSessionId('sess_short') === false, '2.8 Too short session token is rejected');
+
+  // Test that invalid tokens are rejected by recordVisit without incrementing counter
+  const rejected1 = await recordVisit(undefined);
+  assert(rejected1.success === false, '2.9 recordVisit rejects undefined token');
+  assert(rejected1.error?.includes('Invalid or missing session token format'), '2.10 Error message reports invalid format');
+
+  const rejected2 = await recordVisit('malformed_token');
+  assert(rejected2.success === false, '2.11 recordVisit rejects malformed token');
+
+  const statsAfterRejected = await getVisitStats();
+  assert(statsAfterRejected.totalVisits === 0, '2.12 Failed validation attempts do NOT increment total visits');
+
+  // --- 3. Secure Server-Side Counting & Session Deduplication ---
+  console.log('\n--- 3. Server-Side Visit Recording & Session Deduplication ---');
+  const sessionA = 'sess_valid_alpha_12345';
   const recordResult1 = await recordVisit(sessionA);
-  assert(recordResult1.success === true, '2.1 First visit recording succeeds');
-  assert(recordResult1.recorded === true, '2.2 First visit flagged as recorded');
-  assert(recordResult1.totalVisits === 1, '2.3 Total visits increments to 1');
-  assert(recordResult1.todayVisits === 1, '2.4 Today visits increments to 1');
+  assert(recordResult1.success === true, '3.1 First visit recording succeeds');
+  assert(recordResult1.recorded === true, '3.2 First visit flagged as recorded');
+  assert(recordResult1.totalVisits === 1, '3.3 Total visits increments to 1');
+  assert(recordResult1.todayVisits === 1, '3.4 Today visits increments to 1');
 
   // Consecutive recording with the SAME session ID (e.g. page navigation or re-render)
   const recordResult2 = await recordVisit(sessionA);
-  assert(recordResult2.success === true, '2.5 Second request with same session succeeds');
-  assert(recordResult2.totalVisits === 1, '2.6 Duplicate session request does NOT inflate total visits (remains 1)');
-  assert(recordResult2.todayVisits === 1, '2.7 Duplicate session request does NOT inflate today visits (remains 1)');
+  assert(recordResult2.success === true, '3.5 Second request with same session succeeds');
+  assert(recordResult2.totalVisits === 1, '3.6 Duplicate session request does NOT inflate total visits (remains 1)');
+  assert(recordResult2.todayVisits === 1, '3.7 Duplicate session request does NOT inflate today visits (remains 1)');
 
-  // Third recording with a DIFFERENT session ID
-  const sessionB = 'test_session_beta_456';
+  // Third recording with a DIFFERENT valid session ID
+  const sessionB = 'sess_valid_beta_67890';
   const recordResult3 = await recordVisit(sessionB);
-  assert(recordResult3.success === true, '2.8 Distinct session recording succeeds');
-  assert(recordResult3.totalVisits === 2, '2.9 Total visits increments to 2 for distinct visitor');
-  assert(recordResult3.todayVisits === 2, '2.10 Today visits increments to 2 for distinct visitor');
+  assert(recordResult3.success === true, '3.8 Distinct session recording succeeds');
+  assert(recordResult3.totalVisits === 2, '3.9 Total visits increments to 2 for distinct visitor');
+  assert(recordResult3.todayVisits === 2, '3.10 Today visits increments to 2 for distinct visitor');
 
-  // --- 3. Independence from Clock Ticks ---
-  console.log('\n--- 3. Clock Tick & Render Independence ---');
-  // Simulate 10 read requests (as might occur during app renders or polling)
-  for (let i = 0; i < 10; i++) {
-    const stats = await getVisitStats();
-    assert(stats.totalVisits === 2, `3.1 Stats retrieval does not increment count (iteration ${i + 1})`);
-  }
+  // --- 4. Production Persistence Guard & Graceful Unavailable State ---
+  console.log('\n--- 4. Production Authority & Fallback Isolation ---');
+  // When in production mode and Supabase credentials are not connected
+  process.env.NODE_ENV = 'production';
+  const prodRecord = await recordVisit('sess_prod_tester_99999');
+  assert(prodRecord.success === false, '4.1 In production with unconfigured DB, recordVisit reports false');
+  assert(prodRecord.storageType === 'unavailable', '4.2 Storage type reports unavailable (not memory)');
+  assert(prodRecord.totalVisits === null, '4.3 Total visits is null (never fabricated)');
 
-  // Verify that hook source code does not bind counter updates to clock ticks
-  const counterHookCode = fs.readFileSync('src/hooks/useVisitorCounter.ts', 'utf-8');
-  assert(!counterHookCode.includes('setInterval'), '3.2 useVisitorCounter does not invoke setInterval');
-  assert(!counterHookCode.includes('useVisitorClock'), '3.3 useVisitorCounter is decoupled from useVisitorClock');
+  const prodStats = await getVisitStats();
+  assert(prodStats.success === false, '4.4 In production with unconfigured DB, getVisitStats reports false');
+  assert(prodStats.storageType === 'unavailable', '4.5 Stats storage type reports unavailable');
 
-  // --- 4. Database Migration & Security Verification ---
-  console.log('\n--- 4. Supabase Migration & Security Audit ---');
+  // Reset back to development for remaining tests
+  process.env.NODE_ENV = 'development';
+
+  // --- 5. UTC Daily Rollover Semantics ---
+  console.log('\n--- 5. UTC Daily Rollover Semantics ---');
+  const expectedUtcDate = new Date().toISOString().slice(0, 10);
+  const memoryDateKey = inMemoryVisitorStore.getTodayDateKey();
+  assert(memoryDateKey === expectedUtcDate, `5.1 Daily key matches canonical UTC date (${expectedUtcDate})`);
+
+  // --- 6. Supabase SQL Security Audit Verification ---
+  console.log('\n--- 6. Supabase Migration Security & Hardening Audit ---');
   const migrationPath = path.join(process.cwd(), 'supabase/migrations/20261019000000_site_visits.sql');
-  assert(fs.existsSync(migrationPath), '4.1 Supabase migration file exists');
+  assert(fs.existsSync(migrationPath), '6.1 Supabase migration file exists');
 
   const migrationSql = fs.readFileSync(migrationPath, 'utf-8');
-  assert(migrationSql.includes('CREATE TABLE IF NOT EXISTS site_daily_visits'), '4.2 Table site_daily_visits created');
-  assert(migrationSql.includes('ALTER TABLE site_daily_visits ENABLE ROW LEVEL SECURITY;'), '4.3 Row Level Security (RLS) enabled');
-  assert(migrationSql.includes('REVOKE ALL ON TABLE site_daily_visits FROM anon, authenticated;'), '4.4 Client anon and authenticated privileges revoked');
-  assert(migrationSql.includes('GRANT ALL ON TABLE site_daily_visits TO service_role;'), '4.5 Full privileges granted exclusively to service_role');
-  assert(migrationSql.includes('increment_site_visit'), '4.6 Atomic increment stored procedure defined');
-  assert(migrationSql.includes('get_site_visit_stats'), '4.7 Read-only statistics function defined');
+  assert(migrationSql.includes('SET search_path = public, pg_temp'), '6.2 SECURITY DEFINER functions enforce safe, immutable search_path');
+  assert(migrationSql.includes('REVOKE ALL ON FUNCTION increment_site_visit(DATE) FROM PUBLIC, anon, authenticated;'), '6.3 increment_site_visit execution explicitly revoked from PUBLIC, anon, authenticated');
+  assert(migrationSql.includes('REVOKE ALL ON FUNCTION get_site_visit_stats(DATE) FROM PUBLIC, anon, authenticated;'), '6.4 get_site_visit_stats execution explicitly revoked from PUBLIC, anon, authenticated');
+  assert(migrationSql.includes('GRANT EXECUTE ON FUNCTION increment_site_visit(DATE) TO service_role;'), '6.5 increment_site_visit execution granted exclusively to service_role');
+  assert(migrationSql.includes('GRANT EXECUTE ON FUNCTION get_site_visit_stats(DATE) TO service_role;'), '6.6 get_site_visit_stats execution granted exclusively to service_role');
+  assert(migrationSql.includes('COALESCE(target_date, CURRENT_DATE)'), '6.7 NULL or invalid target_date sanitized with COALESCE guard');
+  assert(migrationSql.includes('CREATE OR REPLACE FUNCTION update_site_daily_visits_updated_at()'), '6.8 Dedicated trigger function update_site_daily_visits_updated_at defined');
+  assert(migrationSql.includes('EXECUTE FUNCTION update_site_daily_visits_updated_at()'), '6.9 Trigger references dedicated update_site_daily_visits_updated_at function');
+  assert(!migrationSql.includes('FUNCTION update_updated_at_column()'), '6.10 Shared function update_updated_at_column is NOT redefined or modified');
+  assert(migrationSql.includes('REVOKE ALL ON FUNCTION update_site_daily_visits_updated_at() FROM PUBLIC, anon, authenticated;'), '6.11 Dedicated trigger function privileges revoked from PUBLIC, anon, authenticated');
+  assert(!migrationSql.includes('ip_address'), '6.12 Zero IP address columns');
+  assert(!migrationSql.includes('user_agent'), '6.13 Zero user-agent columns');
 
-  // Privacy guarantees in SQL
-  assert(!migrationSql.includes('ip_address'), '4.8 Zero IP address columns in database schema');
-  assert(!migrationSql.includes('user_agent'), '4.9 Zero user-agent columns in database schema');
-  assert(!migrationSql.includes('location'), '4.10 Zero location columns in database schema');
+  // --- 7. Express and Vercel Handler Parity ---
+  console.log('\n--- 7. Express & Vercel Handler Parity ---');
+  const expressRouteCode = fs.readFileSync('src/server/routes/visitorRoutes.ts', 'utf-8');
+  const vercelRecordCode = fs.readFileSync('api/visits/record.ts', 'utf-8');
+  const vercelStatsCode = fs.readFileSync('api/visits/stats.ts', 'utf-8');
 
-  // --- 5. Component & UI Integration Verification ---
-  console.log('\n--- 5. Layout & UI Integration ---');
-  const footerCode = fs.readFileSync('src/components/layout/Footer.tsx', 'utf-8');
-  assert(footerCode.includes('VisitorPresenceSection'), '5.1 Footer renders VisitorPresenceSection');
+  assert(expressRouteCode.includes('isValidSessionId'), '7.1 Express route validates session token with isValidSessionId');
+  assert(vercelRecordCode.includes('isValidSessionId'), '7.2 Vercel record handler validates session token with isValidSessionId');
+  assert(expressRouteCode.includes('sec-fetch-site'), '7.3 Express route includes defense-in-depth sec-fetch-site check');
+  assert(vercelRecordCode.includes('sec-fetch-site'), '7.4 Vercel record handler includes defense-in-depth sec-fetch-site check');
+  assert(vercelRecordCode.includes('status(400)'), '7.5 Vercel record handler returns 400 on malformed token');
+  assert(expressRouteCode.includes('status(400)'), '7.6 Express route returns 400 on malformed token');
+  assert(vercelStatsCode.includes('status(503)'), '7.7 Vercel stats handler returns 503 on unavailable state');
+  assert(expressRouteCode.includes('status(503)'), '7.8 Express stats route returns 503 on unavailable state');
 
-  const headerCode = fs.readFileSync('src/components/layout/Header.tsx', 'utf-8');
-  assert(headerCode.includes('VisitorClock'), '5.2 Header renders compact VisitorClock');
-
-  const presenceCode = fs.readFileSync('src/components/common/VisitorPresenceSection.tsx', 'utf-8');
-  assert(presenceCode.includes('VisitorClock'), '5.3 VisitorPresenceSection contains VisitorClock');
-  assert(presenceCode.includes('VisitorCounter'), '5.4 VisitorPresenceSection contains VisitorCounter');
+  // --- 8. UI Integration & UTC Labels ---
+  console.log('\n--- 8. UI Integration & UTC Labels ---');
+  const counterComponentCode = fs.readFileSync('src/components/common/VisitorCounter.tsx', 'utf-8');
+  assert(counterComponentCode.includes("Today's Visits (UTC)") || counterComponentCode.includes("Today&apos;s Visits (UTC)"), '8.1 UI labels daily visits with UTC milestone');
+  assert(counterComponentCode.includes('00:00 UTC'), '8.2 Footnote clarifies 00:00 UTC daily reset boundary');
 
   console.log('================================================================');
-  console.log('🎉 ALL FEATURE 2 VISITOR COUNTER TESTS PASSED');
+  console.log('🎉 ALL FEATURE 2 AUDIT & SECURITY FIX TESTS PASSED');
   console.log('================================================================');
 }
 

@@ -65,7 +65,7 @@ export function VisitorCounter({ className = '' }: VisitorCounterProps) {
 
             <div>
               <span className="block text-[11px] font-sans uppercase tracking-wider text-stone-500">
-                Today&apos;s Visits
+                Today&apos;s Visits (UTC)
               </span>
               <span
                 id="counter-today-visits"
@@ -80,7 +80,7 @@ export function VisitorCounter({ className = '' }: VisitorCounterProps) {
           <div className="space-y-1 pt-1">
             <div className="flex items-center gap-1.5 text-xs text-stone-500">
               <ShieldCheck className="w-3.5 h-3.5 text-stone-500 shrink-0" aria-hidden="true" />
-              <span>Genuine server-counted sessions · Zero personal data collected</span>
+              <span>Daily resets at 00:00 UTC · Zero personal data collected</span>
             </div>
 
             {totalVisits === 0 ? (

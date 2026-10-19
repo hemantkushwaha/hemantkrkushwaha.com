@@ -8,7 +8,7 @@
  * 1. Uses Intl.DateTimeFormat().resolvedOptions().timeZone exclusively.
  * 2. Never hardcodes IST or Asia/Kolkata for visitors.
  * 3. Zero GPS permissions, zero precise tracking, zero IP geolocation.
- * 4. Automatic daylight saving time (DST) calculation via native browser IANA tzdb.
+ * 4. Dual-hemisphere aware daylight saving time (DST) calculation via native browser IANA tzdb.
  * 5. Updates every 1,000 ms with high visual stability (tabular numerals).
  */
 
@@ -43,11 +43,72 @@ export function detectVisitorTimeZone(): string {
 }
 
 /**
+ * Resolves UTC offset in minutes for a given date in a specified timezone.
+ * Returns signed minutes from UTC (e.g., +660 for UTC+11, -300 for UTC-5).
+ */
+export function getTimeZoneOffsetMinutes(date: Date, timeZone: string): number {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'longOffset',
+    }).formatToParts(date);
+    const offsetStr = parts.find((p) => p.type === 'timeZoneName')?.value || '';
+    if (offsetStr === 'GMT' || offsetStr === 'UTC' || offsetStr === '') return 0;
+
+    const match = offsetStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+    if (!match) return 0;
+    const sign = match[1] === '+' ? 1 : -1;
+    const hours = parseInt(match[2], 10);
+    const minutes = match[3] ? parseInt(match[3], 10) : 0;
+    return sign * (hours * 60 + minutes);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Checks whether Daylight Saving Time is currently active for the given date and timezone.
+ *
+ * Universal Dual-Hemisphere Algorithm:
+ * - In any timezone observing DST, standard time is defined by the algebraic minimum UTC offset
+ *   observed across the year (winter in that hemisphere).
+ *   - Northern Hemisphere (e.g. New York): Winter in January (-300 min), Summer DST in July (-240 min).
+ *     Standard offset = min(-300, -240) = -300.
+ *   - Southern Hemisphere (e.g. Sydney): Winter in July (+600 min), Summer DST in January (+660 min).
+ *     Standard offset = min(+660, +600) = +600.
+ * - DST is active if and only if the current offset is strictly greater than standard time offset.
+ */
+export function checkDstActive(date: Date, timeZone: string): boolean {
+  try {
+    const year = date.getFullYear();
+    // Sample mid-month points to avoid boundary transition edges
+    const janDate = new Date(Date.UTC(year, 0, 15));
+    const julDate = new Date(Date.UTC(year, 6, 15));
+
+    const janOffsetMins = getTimeZoneOffsetMinutes(janDate, timeZone);
+    const julOffsetMins = getTimeZoneOffsetMinutes(julDate, timeZone);
+
+    // If January and July offsets are identical, this zone does not observe seasonal DST
+    if (janOffsetMins === julOffsetMins) {
+      return false;
+    }
+
+    // Standard time is algebraically the smaller UTC offset in minutes
+    const standardOffsetMins = Math.min(janOffsetMins, julOffsetMins);
+    const currentOffsetMins = getTimeZoneOffsetMinutes(date, timeZone);
+
+    return currentOffsetMins > standardOffsetMins;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolves descriptive labels and offsets for the visitor's detected timezone.
  */
 export function resolveTimeZoneDetails(date: Date, timeZone: string) {
   try {
-    // Short abbreviation (e.g., PDT, EDT, GMT+5:30, BST)
+    // Short abbreviation (e.g., PDT, EDT, GMT+5:30, BST, AEDT, AEST)
     const shortFormatter = new Intl.DateTimeFormat('en-US', {
       timeZone,
       timeZoneName: 'short',
@@ -73,8 +134,6 @@ export function resolveTimeZoneDetails(date: Date, timeZone: string) {
       ? `${cleanRegion} (${shortName})`
       : cleanRegion;
 
-    // Detect if DST is active for the current date in this timezone
-    // Standard test: compare timezone offset in January vs July
     const isDstActive = checkDstActive(date, timeZone);
 
     return {
@@ -90,40 +149,6 @@ export function resolveTimeZoneDetails(date: Date, timeZone: string) {
       offsetStr: '',
       isDstActive: false,
     };
-  }
-}
-
-/**
- * Checks whether Daylight Saving Time is currently active for the given date and timezone.
- */
-export function checkDstActive(date: Date, timeZone: string): boolean {
-  try {
-    const year = date.getFullYear();
-    const janDate = new Date(Date.UTC(year, 0, 1));
-    const julDate = new Date(Date.UTC(year, 6, 1));
-
-    const getOffset = (d: Date) => {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone,
-        timeZoneName: 'longOffset',
-      }).formatToParts(d);
-      return parts.find((p) => p.type === 'timeZoneName')?.value || '';
-    };
-
-    const currentOffset = getOffset(date);
-    const janOffset = getOffset(janDate);
-    const julOffset = getOffset(julDate);
-
-    // If January and July offsets are identical, this zone does not observe DST
-    if (janOffset === julOffset) {
-      return false;
-    }
-
-    // DST typically has a different offset from standard time
-    // For northern hemisphere, DST is usually active during summer (julOffset)
-    return currentOffset !== janOffset;
-  } catch {
-    return false;
   }
 }
 

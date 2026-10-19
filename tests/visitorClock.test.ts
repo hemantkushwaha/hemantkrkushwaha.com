@@ -2,7 +2,7 @@
  * Test Suite: Visitor Local Date & Time (Feature 1)
  * 
  * Hemant Kumar Kushwaha Knowledge Platform (hemantkrkushwaha.com)
- * Architecture: Step 28 Verification
+ * Architecture: Step 28 Verification & Audit Fixes
  */
 
 import {
@@ -12,6 +12,7 @@ import {
   formatVisitorTime,
   formatVisitorCompactTime,
   checkDstActive,
+  getTimeZoneOffsetMinutes,
 } from '../src/hooks/useVisitorClock';
 
 function assert(condition: boolean, message: string) {
@@ -67,25 +68,37 @@ async function runVisitorClockTests() {
   const tokyoTime = formatVisitorTime(testDate, 'Asia/Tokyo');
   assert(nyTime !== tokyoTime, `2.6 Different timezones produce different local wall-clock times (NY: ${nyTime} vs Tokyo: ${tokyoTime})`);
 
-  // --- 3. Daylight Saving Time (DST) Automatic Calculation ---
-  console.log('\n--- 3. Daylight Saving Time (DST) Transitions ---');
-  // New York observes DST: Summer (July) is EDT (UTC-4), Winter (January) is EST (UTC-5)
-  const summerDate = new Date('2026-07-15T12:00:00Z');
-  const winterDate = new Date('2026-01-15T12:00:00Z');
+  // --- 3. Daylight Saving Time (DST) Dual-Hemisphere Calculations ---
+  console.log('\n--- 3. Daylight Saving Time (DST) Transitions & Dual-Hemisphere Audit ---');
+  
+  // 3A. Northern Hemisphere (New York): Summer (July) is EDT (UTC-4), Winter (January) is EST (UTC-5)
+  const nySummerDate = new Date('2026-07-15T12:00:00Z');
+  const nyWinterDate = new Date('2026-01-15T12:00:00Z');
 
-  const nySummerDetails = resolveTimeZoneDetails(summerDate, 'America/New_York');
-  const nyWinterDetails = resolveTimeZoneDetails(winterDate, 'America/New_York');
+  const nySummerDetails = resolveTimeZoneDetails(nySummerDate, 'America/New_York');
+  const nyWinterDetails = resolveTimeZoneDetails(nyWinterDate, 'America/New_York');
   assert(nySummerDetails.shortName === 'EDT', '3.1 Summer in New York resolves to EDT');
   assert(nyWinterDetails.shortName === 'EST', '3.2 Winter in New York resolves to EST');
-  assert(checkDstActive(summerDate, 'America/New_York') === true, '3.3 Summer date correctly identifies active DST in New York');
-  assert(checkDstActive(winterDate, 'America/New_York') === false, '3.4 Winter date correctly identifies inactive DST in New York');
+  assert(checkDstActive(nySummerDate, 'America/New_York') === true, '3.3 Summer date correctly identifies active DST in New York (Northern Hemisphere)');
+  assert(checkDstActive(nyWinterDate, 'America/New_York') === false, '3.4 Winter date correctly identifies inactive DST in New York (Northern Hemisphere)');
 
-  // Zones without DST (e.g. Asia/Kolkata) never report active DST
-  assert(checkDstActive(summerDate, 'Asia/Kolkata') === false, '3.5 Non-DST zone (Asia/Kolkata) returns false for DST');
+  // 3B. Southern Hemisphere (Sydney, Australia): Summer (January) is AEDT (UTC+11), Winter (July) is AEST (UTC+10)
+  const sydneyJanDate = new Date('2026-01-15T12:00:00Z');
+  const sydneyJulDate = new Date('2026-07-15T12:00:00Z');
+
+  const sydneyJanDetails = resolveTimeZoneDetails(sydneyJanDate, 'Australia/Sydney');
+  const sydneyJulDetails = resolveTimeZoneDetails(sydneyJulDate, 'Australia/Sydney');
+  assert(sydneyJanDetails.shortName === 'AEDT' || sydneyJanDetails.offsetStr.includes('+11'), '3.5 Summer in Sydney resolves to AEDT (UTC+11)');
+  assert(sydneyJulDetails.shortName === 'AEST' || sydneyJulDetails.offsetStr.includes('+10'), '3.6 Winter in Sydney resolves to AEST (UTC+10)');
+  assert(checkDstActive(sydneyJanDate, 'Australia/Sydney') === true, '3.7 January date correctly identifies active DST in Sydney (Southern Hemisphere)');
+  assert(checkDstActive(sydneyJulDate, 'Australia/Sydney') === false, '3.8 July date correctly identifies inactive DST in Sydney (Southern Hemisphere)');
+
+  // 3C. Non-DST timezones (e.g. Asia/Kolkata, UTC, Asia/Tokyo)
+  assert(checkDstActive(nySummerDate, 'Asia/Kolkata') === false, '3.9 Non-DST zone (Asia/Kolkata) returns false for DST');
+  assert(checkDstActive(nySummerDate, 'UTC') === false, '3.10 Non-DST zone (UTC) returns false for DST');
 
   // --- 4. Privacy & Zero Tracking Invariants ---
   console.log('\n--- 4. Privacy & Geolocation Invariants ---');
-  // Check that code does not reference navigator.geolocation or GPS APIs
   const hookSource = await import('fs').then(fs => fs.readFileSync('src/hooks/useVisitorClock.ts', 'utf-8'));
   assert(!hookSource.includes('navigator.geolocation'), '4.1 useVisitorClock does not access navigator.geolocation');
   assert(!hookSource.includes('getCurrentPosition'), '4.2 useVisitorClock does not request getCurrentPosition');

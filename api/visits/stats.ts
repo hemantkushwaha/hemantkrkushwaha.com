@@ -18,13 +18,16 @@ export default async function handler(req: any, res: any) {
 
   try {
     const result = await getVisitStats();
+
+    if (!result.success && result.storageType === 'unavailable') {
+      return res.status(503).json(result);
+    }
+
     return res.status(200).json(result);
   } catch (error) {
     return res.status(500).json({
       success: false,
       error: 'Failed to retrieve site visit stats',
-      totalVisits: 0,
-      todayVisits: 0,
     });
   }
 }

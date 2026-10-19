@@ -1,17 +1,3 @@
-/**
- * Real Website Visitor Counter Hook
- * 
- * Hemant Kumar Kushwaha Knowledge Platform (hemantkrkushwaha.com)
- * Architecture: Visitor Counter Hook (Feature 2)
- * 
- * Safety & Resilience Guarantees:
- * 1. Counts once per browser session via client-side sessionStorage check.
- * 2. Strict session token format conforms to ^sess_[a-zA-Z0-9_-]{8,64}$.
- * 3. Decoupled from clock ticks and component re-renders (never inflates counts).
- * 4. Never sends personal data, GPS, or tracking metrics.
- * 5. Gracefully handles network or backend failures without crashing.
- * 6. Accurately reports zero/initial counts without fabricating numbers.
- */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
@@ -26,115 +12,158 @@ export interface VisitorCounterState {
 }
 
 const SESSION_STORAGE_KEY = 'hk_visitor_session_recorded_v1';
+const SESSION_TOKEN_REGEX = /^sess_[a-zA-Z0-9_-]{8,64}$/;
 
 export function getOrCreateSessionToken(): string {
   try {
     const existing = sessionStorage.getItem(SESSION_STORAGE_KEY);
-    if (existing && existing.startsWith('sess_')) return existing;
 
-    const newToken = 'sess_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now().toString(36);
-    return newToken;
+    if (existing && SESSION_TOKEN_REGEX.test(existing)) {
+      return existing;
+    }
+
+    const randomPart = Array.from(
+      crypto.getRandomValues(new Uint8Array(16)),
+      (byte) => byte.toString(16).padStart(2, '0'),
+    ).join('');
+
+    return `sess_${randomPart}`;
   } catch {
-    return 'sess_fallback_' + Date.now().toString(36);
+    // If secure random generation is unavailable, do not invent a weak token.
+    throw new Error('Secure session token generation is unavailable.');
   }
+}
+
+interface VisitorApiResponse {
+  success?: boolean;
+  totalVisits?: number | null;
+  todayVisits?: number | null;
+  storageType?: 'database' | 'memory' | 'unavailable';
+  message?: string;
+  error?: string;
+  recorded?: boolean;
+}
+
+function isValidStatsResponse(
+  data: VisitorApiResponse,
+): data is VisitorApiResponse & {
+  totalVisits: number;
+  todayVisits: number;
+} {
+  return (
+    data.success === true &&
+    typeof data.totalVisits === 'number' &&
+    Number.isSafeInteger(data.totalVisits) &&
+    data.totalVisits >= 0 &&
+    typeof data.todayVisits === 'number' &&
+    Number.isSafeInteger(data.todayVisits) &&
+    data.todayVisits >= 0 &&
+    (data.storageType === 'database' || data.storageType === 'memory')
+  );
 }
 
 export function useVisitorCounter(): VisitorCounterState {
   const [totalVisits, setTotalVisits] = useState<number | null>(null);
   const [todayVisits, setTodayVisits] = useState<number | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [storageType, setStorageType] = useState<'database' | 'memory' | 'unavailable' | null>(null);
-  const [notice, setNotice] = useState<string | undefined>(undefined);
+  const [storageType, setStorageType] =
+    useState<VisitorCounterState['storageType']>(null);
+  const [notice, setNotice] = useState<string | undefined>();
 
-  // Guard to guarantee execution only once on mount, regardless of parent re-renders or StrictMode
-  const hasInitialized = useRef<boolean>(false);
+  const hasInitialized = useRef(false);
+
+  const applyResponse = useCallback((data: VisitorApiResponse) => {
+    if (isValidStatsResponse(data)) {
+      setTotalVisits(data.totalVisits);
+      setTodayVisits(data.todayVisits);
+      setStorageType(data.storageType);
+      setNotice(data.message);
+      setError(null);
+      return true;
+    }
+
+    setTotalVisits(null);
+    setTodayVisits(null);
+    setStorageType('unavailable');
+    setError(data.message || data.error || 'Visitor statistics are unavailable.');
+    return false;
+  }, []);
 
   const fetchStats = useCallback(async () => {
     try {
       const res = await fetch('/api/visits/stats');
-      if (!res.ok) {
-        throw new Error(`Visitor stats returned ${res.status}`);
+      const data = (await res.json()) as VisitorApiResponse;
+
+      if (!res.ok || !applyResponse(data)) {
+        if (res.ok) {
+          setError(data.message || 'Invalid visitor statistics response.');
+        } else {
+          setTotalVisits(null);
+          setTodayVisits(null);
+          setStorageType('unavailable');
+          setError(data.message || `Visitor stats returned ${res.status}`);
+        }
       }
-      const data = await res.json();
-      if (data && typeof data.totalVisits === 'number') {
-        setTotalVisits(data.totalVisits);
-        setTodayVisits(data.todayVisits);
-        setStorageType(data.storageType || 'memory');
-        setNotice(data.message);
-        setError(null);
-      } else if (data && data.storageType === 'unavailable') {
-        setStorageType('unavailable');
-        setError(data.message || 'Visitor counter is temporarily unavailable');
-      }
-    } catch (err: any) {
-      console.warn('[VisitorCounter] Error fetching visitor stats:', err);
-      setError(err?.message || 'Visitor stats unavailable');
+    } catch {
+      setTotalVisits(null);
+      setTodayVisits(null);
+      setStorageType('unavailable');
+      setError('Visitor statistics are temporarily unavailable.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyResponse]);
 
   const recordVisitSession = useCallback(async () => {
     try {
-      let isRecordedInSession = false;
+      let existingSession: string | null = null;
+
       try {
-        isRecordedInSession = Boolean(sessionStorage.getItem(SESSION_STORAGE_KEY));
+        existingSession = sessionStorage.getItem(SESSION_STORAGE_KEY);
       } catch {
-        // sessionStorage unavailable (e.g. strict private mode)
+        // Continue with a request; the server remains authoritative.
       }
 
-      // If already recorded in this browser session, simply fetch the latest numbers
-      if (isRecordedInSession) {
+      if (existingSession && SESSION_TOKEN_REGEX.test(existingSession)) {
         await fetchStats();
         return;
       }
 
-      // Session not yet recorded: invoke server-side increment
       const sessionId = getOrCreateSessionToken();
       const res = await fetch('/api/visits/record', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId }),
       });
 
+      const data = (await res.json()) as VisitorApiResponse;
+
       if (!res.ok) {
-        throw new Error(`Visit recording returned ${res.status}`);
+        throw new Error(data.message || data.error || `Visit recording returned ${res.status}`);
       }
 
-      const data = await res.json();
-      if (data && typeof data.totalVisits === 'number') {
-        setTotalVisits(data.totalVisits);
-        setTodayVisits(data.todayVisits);
-        setStorageType(data.storageType || 'memory');
-        setNotice(data.message);
-        setError(null);
-
-        try {
-          sessionStorage.setItem(SESSION_STORAGE_KEY, sessionId);
-        } catch {
-          // ignore
-        }
-      } else if (data && data.storageType === 'unavailable') {
-        setStorageType('unavailable');
-        setError(data.message || 'Visitor counter is temporarily unavailable');
+      if (!applyResponse(data)) {
+        return;
       }
-    } catch (err: any) {
-      console.warn('[VisitorCounter] Error recording session:', err);
-      // Graceful fallback: attempt read-only stats
+
+      try {
+        sessionStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+      } catch {
+        // Counting may work even if browser storage is disabled.
+      }
+    } catch {
+      // Do not turn a failed recording into a fabricated count.
       await fetchStats();
     } finally {
       setLoading(false);
     }
-  }, [fetchStats]);
+  }, [applyResponse, fetchStats]);
 
   useEffect(() => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
-
-    recordVisitSession();
+    void recordVisitSession();
   }, [recordVisitSession]);
 
   return {

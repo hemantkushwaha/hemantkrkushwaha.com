@@ -1,3 +1,4 @@
+
 {
   "name": "react-example",
   "private": true,
@@ -10,8 +11,8 @@
     "preview": "vite preview",
     "ingest:notebooklm": "tsx scripts/notebookLM-ingest.ts",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
-    "test:visitor": "tsx tests/visitorClock.test.ts && tsx tests/visitorCounter.test.ts",
+    "lint": "tsc --noEmit",
+    "test:visitor": "tsx tests/visitorClock.test.ts && tsx tests/visitorCounter.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -20,6 +21,7 @@
     "@types/sanitize-html": "^2.16.1",
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",
+    "esbuild": "^0.25.0",
     "express": "^4.21.2",
     "lucide-react": "^0.546.0",
     "mammoth": "^1.12.3",

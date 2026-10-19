@@ -44,7 +44,7 @@ function PageRouter() {
           key={`${segments[0]}-${segments[1]}`}
         />
       );
-    } else if (segments.length === 3) {
+    } else if (segments.length === 3 || segments.length >= 4) {
       return (
         <TopicPage
           subjectSlug={segments[0]}

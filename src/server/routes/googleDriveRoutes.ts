@@ -14,6 +14,9 @@ import {
   handleListGoogleDriveFiles,
   handlePreviewGoogleDriveFile,
 } from '../controllers/googleDriveController.js';
+import {
+  handleConvertGoogleDriveDocx,
+} from '../controllers/documentReaderController.js';
 
 export const googleDriveRouter = Router();
 
@@ -29,6 +32,12 @@ googleDriveRouter.get(
   '/files/:fileId/preview',
   authenticateIngestionRequest,
   handlePreviewGoogleDriveFile
+);
+
+// GET /api/google-drive/files/:fileId/convert - Convert DOCX file into web-safe structured document for Native Reader
+googleDriveRouter.get(
+  '/files/:fileId/convert',
+  handleConvertGoogleDriveDocx
 );
 
 export default googleDriveRouter;

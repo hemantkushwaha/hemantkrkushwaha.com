@@ -15,6 +15,7 @@ import {
   AcademicTopic,
   AcademicResource,
   AcademicBreadcrumbItem,
+  AcademicQuestionItem,
 } from '../types/academicNavigation.js';
 
 export const academicSubjects: AcademicSubject[] = [
@@ -87,6 +88,124 @@ export const academicSubjects: AcademicSubject[] = [
                   'Curated academic examination questions, GATE/competitive numerical problems on TCP window calculation, and conceptual review sets.',
                 status: 'pending',
                 statusMessage: 'Resource not connected yet',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'design-and-analysis-of-algorithms',
+    slug: 'design-and-analysis-of-algorithms',
+    code: 'CS-401',
+    title: 'Design and Analysis of Algorithms',
+    subtitle: 'Algorithmic Paradigms, Graph Theory & Complexity Analysis',
+    description:
+      'A rigorous curriculum covering asymptotic analysis, divide-and-conquer, dynamic programming, greedy algorithms, advanced graph theory, shortest paths, network flows, and NP-completeness.',
+    units: [
+      {
+        id: 'graph-algorithms',
+        slug: 'graph-algorithms',
+        unitNumber: 3,
+        title: 'Graph Algorithms',
+        subtitle: 'Traversals, Shortest Paths & Network Flow Optimization',
+        description:
+          'Exploration of graph representations, BFS/DFS traversals, minimum spanning trees, single-source and all-pairs shortest paths, zero-weight cycles, and directed graph walk dynamics.',
+        topics: [
+          {
+            id: 'shortest-paths',
+            slug: 'shortest-paths',
+            title: 'Shortest Path Algorithms',
+            subtitle: 'Shortest Walks, Zero-Weight Cycles & Path Optimization',
+            description:
+              'Analysis of distance metrics in weighted directed graphs, relaxation techniques (Dijkstra, Bellman-Ford), arbitrary walk formulations, and convergence in the presence of zero-weight and negative cycles.',
+            resources: [
+              {
+                id: 'study-material',
+                type: 'study_material',
+                title: 'Study Material',
+                description:
+                  'Lecture notes, proofs of optimality, edge relaxation invariants, and step-by-step trace walkthroughs of shortest-path algorithms.',
+                status: 'pending',
+                statusMessage: 'Resource not connected yet',
+              },
+              {
+                id: 'ppt',
+                type: 'ppt',
+                title: 'PPT',
+                description:
+                  'Visual slide deck detailing graph models, Dijkstra priority queues, Bellman-Ford dynamic programming, and DAG shortest paths.',
+                status: 'pending',
+                statusMessage: 'Resource not connected yet',
+              },
+              {
+                id: 'interactive-app',
+                type: 'interactive_app',
+                title: 'Interactive App',
+                description:
+                  'Interactive graph visualizer for constructing weighted directed graphs and observing real-time shortest path relaxation steps.',
+                status: 'pending',
+                statusMessage: 'Resource not connected yet',
+              },
+              {
+                id: 'question-bank',
+                type: 'question_bank',
+                title: 'Question Bank',
+                description:
+                  'Curated academic examination problems, university test questions, and rigorous theoretical analyses on shortest path properties and graph walks.',
+                status: 'connected',
+                statusMessage: '1 Solved Problem Available',
+                questions: [
+                  {
+                    id: 'shortest-distance-shortest-walks-directed-graph',
+                    slug: 'shortest-distance-shortest-walks-directed-graph',
+                    title: 'Shortest Distance and Number of Shortest Walks in a Directed Graph',
+                    question:
+                      'A directed graph has edges S→A (1), A→B (0), B→A (0), and B→T (1). For walks that may revisit vertices, find the shortest S→T distance and the number of shortest walks. Explain briefly.',
+                    answer:
+                      'The shortest S→T distance is 2.\n\nEvery S→T walk must follow S→A→B initially and eventually take B→T. Between reaching B and taking B→T, the walk may traverse the zero-weight cycle B→A→B any number k ≥ 0 of times.\n\nThe total weight of such a walk is:\n\n1 + 0 + k(0 + 0) + 1 = 2\n\nBecause the cycle has weight zero, traversing it does not change the total weight. Every non-negative integer k produces a distinct S→T walk with weight 2.\n\nTherefore:\n\n- Shortest S→T distance: 2\n- Number of shortest walks: Countably infinite',
+                    explanation:
+                      'A walk is allowed to revisit vertices and edges. The zero-weight directed cycle between vertices A and B (A→B with weight 0 and B→A with weight 0) can be traversed any arbitrary number of times k ≥ 0 without adding any cost to the path, yielding an infinite sequence of distinct valid walks all having the minimum distance of 2.',
+                    graphEdges: [
+                      { from: 'S', to: 'A', weight: 1 },
+                      { from: 'A', to: 'B', weight: 0 },
+                      { from: 'B', to: 'A', weight: 0 },
+                      { from: 'B', to: 'T', weight: 1 },
+                    ],
+                    mathFormula: '1 + 0 + k(0 + 0) + 1 = 2',
+                    keyFindings: [
+                      { label: 'Shortest S→T distance', value: '2' },
+                      { label: 'Number of shortest walks', value: 'Countably infinite' },
+                    ],
+                    tags: ['Graph Theory', 'Shortest Paths', 'Zero-Weight Cycles', 'Graph Walks', 'DAA'],
+                  },
+                ],
+              },
+            ],
+            questions: [
+              {
+                id: 'shortest-distance-shortest-walks-directed-graph',
+                slug: 'shortest-distance-shortest-walks-directed-graph',
+                title: 'Shortest Distance and Number of Shortest Walks in a Directed Graph',
+                question:
+                  'A directed graph has edges S→A (1), A→B (0), B→A (0), and B→T (1). For walks that may revisit vertices, find the shortest S→T distance and the number of shortest walks. Explain briefly.',
+                answer:
+                  'The shortest S→T distance is 2.\n\nEvery S→T walk must follow S→A→B initially and eventually take B→T. Between reaching B and taking B→T, the walk may traverse the zero-weight cycle B→A→B any number k ≥ 0 of times.\n\nThe total weight of such a walk is:\n\n1 + 0 + k(0 + 0) + 1 = 2\n\nBecause the cycle has weight zero, traversing it does not change the total weight. Every non-negative integer k produces a distinct S→T walk with weight 2.\n\nTherefore:\n\n- Shortest S→T distance: 2\n- Number of shortest walks: Countably infinite',
+                explanation:
+                  'A walk is allowed to revisit vertices and edges. The zero-weight directed cycle between vertices A and B (A→B with weight 0 and B→A with weight 0) can be traversed any arbitrary number of times k ≥ 0 without adding any cost to the path, yielding an infinite sequence of distinct valid walks all having the minimum distance of 2.',
+                graphEdges: [
+                  { from: 'S', to: 'A', weight: 1 },
+                  { from: 'A', to: 'B', weight: 0 },
+                  { from: 'B', to: 'A', weight: 0 },
+                  { from: 'B', to: 'T', weight: 1 },
+                ],
+                mathFormula: '1 + 0 + k(0 + 0) + 1 = 2',
+                keyFindings: [
+                  { label: 'Shortest S→T distance', value: '2' },
+                  { label: 'Number of shortest walks', value: 'Countably infinite' },
+                ],
+                tags: ['Graph Theory', 'Shortest Paths', 'Zero-Weight Cycles', 'Graph Walks', 'DAA'],
               },
             ],
           },
@@ -195,4 +314,37 @@ export function buildAcademicBreadcrumbs(
   });
 
   return breadcrumbs;
+}
+
+/**
+ * Returns all questions associated with a specific topic.
+ */
+export function getAcademicQuestions(
+  subjectSlug: string,
+  unitSlug: string,
+  topicSlug: string
+): AcademicQuestionItem[] {
+  const topic = getAcademicTopicBySlug(subjectSlug, unitSlug, topicSlug);
+  if (!topic) return [];
+  if (topic.questions && topic.questions.length > 0) {
+    return topic.questions;
+  }
+  const qBankResource = topic.resources.find((r) => r.type === 'question_bank');
+  return qBankResource?.questions || [];
+}
+
+/**
+ * Finds a specific question within a topic by slug.
+ */
+export function getAcademicQuestionBySlug(
+  subjectSlug: string,
+  unitSlug: string,
+  topicSlug: string,
+  questionSlug: string
+): AcademicQuestionItem | undefined {
+  const questions = getAcademicQuestions(subjectSlug, unitSlug, topicSlug);
+  if (!questionSlug) return undefined;
+  return questions.find(
+    (q) => q.slug.toLowerCase() === questionSlug.toLowerCase().trim() || q.id.toLowerCase() === questionSlug.toLowerCase().trim()
+  );
 }

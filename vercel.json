@@ -9,6 +9,10 @@
       "destination": "/api/google-drive/files/[fileId]/preview"
     },
     {
+      "source": "/api/google-drive/files/:fileId/convert",
+      "destination": "/api/google-drive/files/[fileId]/convert"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

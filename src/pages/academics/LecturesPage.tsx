@@ -73,7 +73,7 @@ export function LecturesPage() {
             </div>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-stone-100 text-stone-700 border border-stone-200 self-start sm:self-auto">
               <GraduationCap className="w-3.5 h-3.5 text-stone-600" aria-hidden="true" />
-              {subjects.length} Active Course
+              {subjects.length} Active {subjects.length === 1 ? 'Course' : 'Courses'}
             </span>
           </div>
 
@@ -129,7 +129,7 @@ export function LecturesPage() {
                       <div className="pt-2">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs bg-stone-100 text-stone-700 border border-stone-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                          {unitCount} {unitCount === 1 ? 'Unit' : 'Units'} (Transport Layer)
+                          {unitCount} {unitCount === 1 ? 'Unit' : 'Units'} ({subject.units.map((u) => u.title).join(', ')})
                         </span>
                       </div>
                     </div>

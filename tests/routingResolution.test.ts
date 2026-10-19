@@ -16,7 +16,15 @@ async function runRoutingTests() {
   );
   assert.ok(previewRewrite, 'Must contain explicit rewrite for /api/google-drive/files/:fileId/preview');
   assert.equal(previewRewrite.destination, '/api/google-drive/files/[fileId]/preview');
-  console.log('  ✅ PASS: 1. Explicit preview endpoint rewrite exists and maps to serverless path');
+  console.log('  ✅ PASS: 1.1 Explicit preview endpoint rewrite exists and maps to serverless path');
+
+  // Verify explicit rewrite for Google Drive file convert endpoint exists
+  const convertRewrite = vercelConfig.rewrites.find(
+    (r: any) => r.source === '/api/google-drive/files/:fileId/convert'
+  );
+  assert.ok(convertRewrite, 'Must contain explicit rewrite for /api/google-drive/files/:fileId/convert');
+  assert.equal(convertRewrite.destination, '/api/google-drive/files/[fileId]/convert');
+  console.log('  ✅ PASS: 1.2 Explicit convert endpoint rewrite exists and maps to serverless path');
 
   // Verify SPA fallback does not intercept /api routes
   const spaFallback = vercelConfig.rewrites.find(
@@ -65,6 +73,9 @@ async function runRoutingTests() {
   // Verify serverless files exist on disk
   const previewServerlessPath = path.join(process.cwd(), 'api/google-drive/files/[fileId]/preview.ts');
   assert.ok(fs.existsSync(previewServerlessPath), 'api/google-drive/files/[fileId]/preview.ts must exist');
+
+  const convertServerlessPath = path.join(process.cwd(), 'api/google-drive/files/[fileId]/convert.ts');
+  assert.ok(fs.existsSync(convertServerlessPath), 'api/google-drive/files/[fileId]/convert.ts must exist');
 
   const filesServerlessPath = path.join(process.cwd(), 'api/google-drive/files.ts');
   assert.ok(fs.existsSync(filesServerlessPath), 'api/google-drive/files.ts must exist');

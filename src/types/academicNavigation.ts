@@ -23,6 +23,19 @@ export interface AcademicResourceSource {
   size_bytes?: number;
 }
 
+export interface AcademicQuestionItem {
+  id: string;
+  slug: string;
+  title: string;
+  question: string;
+  answer: string;
+  explanation?: string;
+  graphEdges?: Array<{ from: string; to: string; weight: number }>;
+  mathFormula?: string;
+  keyFindings?: Array<{ label: string; value: string }>;
+  tags?: string[];
+}
+
 export interface AcademicResource {
   id: string;
   type: AcademicResourceType;
@@ -31,6 +44,7 @@ export interface AcademicResource {
   status: 'pending' | 'connected';
   statusMessage: string;
   source?: AcademicResourceSource;
+  questions?: AcademicQuestionItem[];
 }
 
 export interface AcademicTopic {
@@ -40,6 +54,7 @@ export interface AcademicTopic {
   subtitle?: string;
   description: string;
   resources: AcademicResource[];
+  questions?: AcademicQuestionItem[];
 }
 
 export interface AcademicUnit {

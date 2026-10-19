@@ -175,7 +175,7 @@ export function SubjectPage({ subjectSlug }: SubjectPageProps) {
                       <div className="pt-2">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs bg-stone-100 text-stone-700 border border-stone-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                          {topicCount} {topicCount === 1 ? 'Topic' : 'Topics'} (TCP)
+                          {topicCount} {topicCount === 1 ? 'Topic' : 'Topics'} ({unit.topics.map((t) => t.title).join(', ')})
                         </span>
                       </div>
                     </div>

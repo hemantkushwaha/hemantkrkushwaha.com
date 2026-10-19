@@ -178,8 +178,19 @@ export function UnitPage({ subjectSlug, unitSlug }: UnitPageProps) {
                       {/* Resources status summary */}
                       <div className="pt-2">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs bg-stone-100 text-stone-700 border border-stone-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
-                          {resourceCount} Resources Defined (Connection Pending)
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              topic.resources.some((r) => r.status === 'connected')
+                                ? 'bg-emerald-600'
+                                : 'bg-amber-600'
+                            }`}
+                          />
+                          {resourceCount} Resources Defined
+                          {topic.resources.some((r) => r.status === 'connected') && (
+                            <span className="text-emerald-700 font-medium">
+                              &bull; {topic.resources.filter((r) => r.status === 'connected').length} Connected
+                            </span>
+                          )}
                         </span>
                       </div>
                     </div>

@@ -131,6 +131,17 @@ export function ResourceCard({ resource }: ResourceCardProps) {
               <ExternalLink className="w-4 h-4 text-stone-400" aria-hidden="true" />
             </a>
           )}
+
+          {isConnected && resource.type === 'question_bank' && resource.questions && resource.questions.length > 0 && (
+            <a
+              id={`resource-question-link-${resource.id}`}
+              href="#question-bank-section"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-stone-900 text-stone-50 hover:bg-stone-800 active:bg-stone-950 font-medium text-sm transition-colors shadow-xs"
+            >
+              <span>View Solved Problem ({resource.questions.length})</span>
+              <HelpCircle className="w-4 h-4 text-stone-400" aria-hidden="true" />
+            </a>
+          )}
         </div>
       </Card>
     </article>

@@ -20,10 +20,11 @@
  * - ZERO simulated content
  */
 
-import { Network, Info, Compass } from 'lucide-react';
+import { Network, Info, Compass, HelpCircle } from 'lucide-react';
 import { Container } from '../../components/common/Container';
 import { AcademicBreadcrumbs } from '../../components/academics/AcademicBreadcrumbs';
 import { ResourceCard } from '../../components/academics/ResourceCard';
+import { AcademicQuestionCard } from '../../components/academics/AcademicQuestionCard';
 import {
   buildAcademicBreadcrumbs,
   getAcademicSubjectBySlug,
@@ -171,6 +172,55 @@ export function TopicPage({ subjectSlug, unitSlug, topicSlug }: TopicPageProps) 
           </div>
         </div>
       </Container>
+
+      {/* Question Bank & Curated Analytical Solutions Section */}
+      {(() => {
+        const questions =
+          (topic.questions && topic.questions.length > 0)
+            ? topic.questions
+            : (topic.resources.find((r) => r.type === 'question_bank')?.questions || []);
+
+        if (questions.length === 0) return null;
+
+        return (
+          <Container size="xl">
+            <section
+              id="question-bank-section"
+              aria-labelledby="question-bank-heading"
+              className="space-y-8 pt-8 border-t border-stone-200"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
+                <div>
+                  <h2
+                    id="question-bank-heading"
+                    className="font-serif text-2xl font-medium text-stone-950"
+                  >
+                    Question Bank &amp; Analytical Solutions
+                  </h2>
+                  <p className="text-xs sm:text-sm text-stone-600 mt-1">
+                    Curated academic problems with complete step-by-step solutions, edge specifications, and mathematical proofs.
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-stone-100 text-stone-700 border border-stone-200 self-start sm:self-auto">
+                  <HelpCircle className="w-3.5 h-3.5 text-stone-600" aria-hidden="true" />
+                  {questions.length} Solved Problem{questions.length === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              <div className="space-y-8">
+                {questions.map((q) => (
+                  <AcademicQuestionCard
+                    key={q.id}
+                    questionItem={q}
+                    subjectTitle={subject.title}
+                    topicTitle={topic.title}
+                  />
+                ))}
+              </div>
+            </section>
+          </Container>
+        );
+      })()}
     </div>
   );
 }

@@ -11,6 +11,7 @@
     "ingest:notebooklm": "tsx scripts/notebookLM-ingest.ts",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
+    "test:visitor": "tsx tests/visitorClock.test.ts && tsx tests/visitorCounter.test.ts",
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

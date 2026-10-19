@@ -109,16 +109,27 @@ AS $$
 DECLARE
   safe_target_date DATE;
 BEGIN
+  -- Prevent NULL or corrupting target dates
   safe_target_date := COALESCE(target_date, CURRENT_DATE);
 
+  -- Sanity check: reject dates unreasonably far in the past or future
+  IF safe_target_date < DATE '2024-01-01'
+     OR safe_target_date > (CURRENT_DATE + INTERVAL '1 day') THEN
+    safe_target_date := CURRENT_DATE;
+  END IF;
+
   RETURN QUERY
-  SELECT 
+  SELECT
     COALESCE(SUM(v.visit_count), 0)::BIGINT AS total_visits,
-    COALESCE(MAX(CASE WHEN v.visit_date = safe_target_date THEN v.visit_count ELSE 0 END), 0)::BIGINT AS today_visits
+    COALESCE(
+      MAX(CASE
+        WHEN v.visit_date = safe_target_date THEN v.visit_count
+        ELSE 0
+      END), 0
+    )::BIGINT AS today_visits
   FROM site_daily_visits v;
 END;
 $$;
-
 -- 8. Function Privileges & RPC Isolation
 -- Revoke default public execution privileges to block direct PostgREST calls from public clients
 REVOKE ALL ON FUNCTION update_site_daily_visits_updated_at() FROM PUBLIC, anon, authenticated;

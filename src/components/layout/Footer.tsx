@@ -1,6 +1,7 @@
 import { siteConfig } from '../../config/site';
 import { Container } from '../common/Container';
 import { Link } from '../../router/RouterContext';
+import { VisitorPresenceSection } from '../common/VisitorPresenceSection';
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -59,8 +60,11 @@ export function Footer() {
           </div>
         </div>
 
+        {/* Visitor Presence & Platform Statistics (Step 28) */}
+        <VisitorPresenceSection />
+
         {/* Bottom Bar */}
-        <div className="mt-10 pt-6 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-stone-500">
+        <div className="mt-8 pt-6 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-stone-500">
           <p>
             &copy; {currentYear} {siteConfig.title}. All rights reserved.
           </p>

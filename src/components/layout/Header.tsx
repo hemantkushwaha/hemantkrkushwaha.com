@@ -3,6 +3,7 @@ import { Menu, X } from 'lucide-react';
 import { siteConfig } from '../../config/site';
 import { Container } from '../common/Container';
 import { Link, useRouter } from '../../router/RouterContext';
+import { VisitorClock } from '../common/VisitorClock';
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -72,6 +73,11 @@ export function Header() {
               </Link>
             ))}
           </nav>
+
+          {/* Zone 3: Visitor Live Local Clock (Desktop) */}
+          <div className="hidden lg:flex items-center pl-2">
+            <VisitorClock variant="compact" />
+          </div>
 
           {/* Mobile Menu Toggle */}
           <div className="flex items-center md:hidden">

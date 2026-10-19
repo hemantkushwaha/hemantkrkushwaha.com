@@ -7,6 +7,7 @@ import storageRouter from './src/server/routes/storageRoutes.js';
 import automationRouter from './src/server/routes/automationRoutes.js';
 import { googleAuthRouter } from './src/server/routes/googleAuthRoutes.js';
 import googleDriveRouter from './src/server/routes/googleDriveRoutes.js';
+import { visitorRouter } from './src/server/routes/visitorRoutes.js';
 
 async function startServer() {
   const app = express();
@@ -62,6 +63,9 @@ async function startServer() {
   // Step 12: Secure Storage & Signed URL API
   app.use('/api/storage', storageRouter);
   app.use('/api/content', storageRouter);
+
+  // Step 28: Real Website Visitor Counter API
+  app.use('/api/visits', visitorRouter);
 
   // Vite middleware for development or static serving for production
   if (process.env.NODE_ENV !== 'production') {

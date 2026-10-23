@@ -108,6 +108,39 @@ assert.strictEqual(mockPaper2.doiStatus, 'not_assigned', '4.1 Missing DOI is exp
 assert.strictEqual(mockPaper2.doi, undefined, '4.2 Missing DOI is never fabricated or guessed');
 console.log('  ✅ PASS: 4.1-4.2 DOI integrity rules enforced without fabrication');
 
+// 5. Verification of the 5 Real Publication Records in Registry
+console.log('\n--- 5. Registry Invariants (Exact 5 Published Papers) ---');
+import { publicationRecords } from '../src/data/publicationData';
+
+assert.strictEqual(publicationRecords.length, 5, '5.1 Exactly 5 publication records in dataset');
+console.log('  ✅ PASS: 5.1 Exactly 5 published papers cataloged');
+
+// Verify unique IDs and Slugs
+const ids = new Set(publicationRecords.map((p) => p.id));
+assert.strictEqual(ids.size, 5, '5.2 Unique IDs for all 5 papers');
+
+const slugs = new Set(publicationRecords.map((p) => p.slug));
+assert.strictEqual(slugs.size, 5, '5.3 Unique slugs for all 5 papers');
+
+// Verify Hemant Kumar Kushwaha is author in every record
+publicationRecords.forEach((paper, idx) => {
+  const hasAuthor = paper.authors.some((a) => a.includes('Kushwaha'));
+  assert(hasAuthor, `5.4.${idx + 1} Paper "${paper.title}" includes Hemant Kumar Kushwaha`);
+  assert(paper.abstract.length > 50, `5.4.${idx + 1} Paper has complete extracted abstract`);
+  assert(paper.keywords.length >= 3, `5.4.${idx + 1} Paper has extracted keywords`);
+});
+console.log('  ✅ PASS: 5.4 Author attribution, abstracts, and keywords verified for all 5 papers');
+
+// Verify DOI states
+assert.strictEqual(publicationRecords[0].doiStatus, 'verified', '5.5 Paper 1 has verified DOI');
+assert.strictEqual(publicationRecords[0].doi, '10.5281/zenodo.18171274');
+for (let i = 1; i < 5; i++) {
+  assert.strictEqual(publicationRecords[i].doiStatus, 'not_assigned', `5.6 Paper ${i + 1} has not_assigned DOI`);
+  assert.strictEqual(publicationRecords[i].doi, undefined, `5.6 Paper ${i + 1} has undefined DOI (no fabrication)`);
+}
+console.log('  ✅ PASS: 5.5-5.6 Strict DOI integrity verified (1 verified Zenodo DOI, 4 unassigned)');
+
 console.log('\n================================================================');
 console.log('🎉 ALL RESEARCH PUBLICATIONS ARCHITECTURE TESTS PASSED');
 console.log('================================================================\n');
+

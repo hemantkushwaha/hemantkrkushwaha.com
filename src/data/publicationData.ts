@@ -2,11 +2,11 @@
  * Research Publication Dataset & Query Layer
  * 
  * Hemant Kumar Kushwaha Knowledge Platform (hemantkrkushwaha.com)
- * Architecture: Scholarly Publications Registry
+ * Architecture: Scholarly Publications Registry — All 5 Published Papers
  * 
  * Strict Data Invariants:
- * - Exactly five publication records in the portfolio dataset.
- * - Extracted directly from primary source documents in the author's research repository.
+ * - Exactly five publication records corresponding to the five author research papers.
+ * - Extracted directly from primary source documents.
  * - Zero fabricated metadata (no invented DOIs, citations, or metrics).
  * - Exact author ordering and journal citation coordinates preserved.
  */
@@ -14,10 +14,10 @@
 import { PublicationItem, PublicationFilters } from '../types/publication';
 
 /**
- * Registry of Published Research Papers (All 5 Papers)
+ * Registry of Published Research Papers (Exact 5 Papers)
  */
 export const publicationRecords: PublicationItem[] = [
-  // --- PAPER 1 ---
+  // --- PAPER 1 (2026) ---
   {
     id: 'pub-time-complexity-big-data-ai',
     slug: 'time-complexity-modern-big-data-ai',
@@ -46,9 +46,10 @@ export const publicationRecords: PublicationItem[] = [
     pdfUrl: '/publications/time-complexity-big-data-ai.pdf',
     externalUrl: 'https://www.ijerd.com',
     peerReviewed: true,
+    notes: 'Date of Submission: 20-03-2026, Date of Acceptance: 03-04-2026.',
   },
 
-  // --- PAPER 2 ---
+  // --- PAPER 2 (2026) ---
   {
     id: 'pub-latency-optimization-gpt5-dialogues',
     slug: 'latency-optimization-gpt5-dialogues-memory-block',
@@ -76,10 +77,10 @@ export const publicationRecords: PublicationItem[] = [
     pdfUrl: '/publications/latency-optimization-gpt5-dialogues.pdf',
     externalUrl: 'https://www.ijert.org',
     peerReviewed: true,
-    notes: 'Article ID: IJERTV15IS010287',
+    notes: 'Article ID: IJERTV15IS010287. Licensed under CC BY 4.0.',
   },
 
-  // --- PAPER 3 ---
+  // --- PAPER 3 (2026) ---
   {
     id: 'pub-smart-educational-agent-langchain',
     slug: 'smart-educational-agent-learning-support-llms-langchain',
@@ -93,7 +94,7 @@ export const publicationRecords: PublicationItem[] = [
       'Mahadev A. Gawas',
       'Hemant Kumar Kushwaha',
     ],
-    journalOrConference: 'Scholarly Research Monograph / Journal Proceedings (Venue Pending Verification)',
+    journalOrConference: 'Scholarly Research Article (Publication Venue Details Pending Verification)',
     publicationType: 'journal',
     year: 2026,
     pageRange: '1-14',
@@ -106,45 +107,76 @@ export const publicationRecords: PublicationItem[] = [
       'Smart Educational Agent',
       'LangChain',
       'Retrieval-Augmented Generation',
-      'Qdrant',
     ],
     pdfUrl: '/publications/smart-educational-agent-langchain.pdf',
     peerReviewed: true,
-    notes: 'Author ORCID: 0000-0002-1365-6063. Target venue coordinates flagged for user verification.',
+    notes: 'Corresponding Author: Deepak B. M. Hemant Kumar Kushwaha ORCID: 0000-0002-1365-6063.',
   },
 
-  // --- PAPER 4 (Flagged pending Drive upload) ---
+  // --- PAPER 4 (2014) ---
   {
-    id: 'pub-portfolio-paper-4',
-    slug: 'research-publication-paper-4',
-    title: 'Research Publication #4 (Awaiting Source Document Upload)',
-    authors: ['Hemant Kumar Kushwaha'],
-    journalOrConference: 'Pending Document Upload (3 of 5 papers found in Drive folder)',
+    id: 'pub-personalized-recommender-system-2014',
+    slug: 'personalized-recommender-system-online-social-networks',
+    title:
+      'Personalized Recommender System (A Personal Recommender System for Online Social Networking Sites)',
+    authors: ['Hemant Kumar Kushwaha', 'J. Jeysree'],
+    journalOrConference: 'International Journal of Computer Applications (IJCA)',
     publicationType: 'journal',
-    year: 2026,
+    year: 2014,
+    publicationDate: 'May 2014',
+    volume: '93',
+    issue: '9',
+    pageRange: '1-6',
+    issn: '0975-8887',
     doiStatus: 'not_assigned',
     abstract:
-      'Source document is pending upload in the designated Google Drive research folder. The shared Google Drive folder currently contains 3 published paper PDFs (220498109.pdf, latency-optimization-gpt5.pdf, and smart-educational-agent-langchain.pdf). Once Paper 4 is added to the folder, its exact title, co-authors, journal venue, and abstract will be extracted and indexed immediately.',
-    keywords: ['Research Portfolio', 'Scholarly Inquiry', 'Pending Ingestion'],
+      'Recommender system for online marketing site plays a key role for the e-marketing or purchase made online by consumers. As there are many recommendations for a particular keyword, determining which recommendations have higher impact for a particular user is difficult. So it is useful to make a personal recommender based on the user preferences may helpful in solving such a problems and can deliver a good search result. Based on user actions (preferences, like) within a close group like any networking site a best personalized recommender can be designed. As the growing popularity of www every things going to be dependent on the virtual world, e-commerce and e-advertisement are the very important aspect of them, the growing popularity of www also leaded to virtualized one’s friend. So this work is defining an approach in which the personal relationships between friends is calculated after that this calculation can be used to determine the good recommender for a particular user based on his/her friends reviews and his/her preferences.',
+    keywords: [
+      'Trust',
+      'Trust_Friend',
+      'Recommender',
+      'Trust metrics',
+      'ego user close-nest',
+    ],
+    externalUrl: 'https://www.ijcaonline.org',
     peerReviewed: true,
-    notes: 'Flagged for verification per Instruction 8: Source PDF missing from Drive folder.',
+    notes: 'Department of Information Technology, SRM University, Kattankulathur, India.',
   },
 
-  // --- PAPER 5 (Flagged pending Drive upload) ---
+  // --- PAPER 5 (2014) ---
   {
-    id: 'pub-portfolio-paper-5',
-    slug: 'research-publication-paper-5',
-    title: 'Research Publication #5 (Awaiting Source Document Upload)',
-    authors: ['Hemant Kumar Kushwaha'],
-    journalOrConference: 'Pending Document Upload (3 of 5 papers found in Drive folder)',
-    publicationType: 'conference',
-    year: 2026,
+    id: 'pub-trust-system-social-networking-2014',
+    slug: 'trust-system-revelent-useful-facts-social-networking',
+    title:
+      'Trust_System: How to know which fact is revelent and useful within a social networking site',
+    authors: ['Hemant Kumar Kushwaha', 'Ms. J. Jeysree'],
+    journalOrConference: 'International Journal of Engineering Development and Research (IJEDR)',
+    publicationType: 'journal',
+    year: 2014,
+    publicationDate: '2014',
+    volume: '2',
+    issue: '1',
+    pageRange: '704-712',
+    issn: '2321-9939',
     doiStatus: 'not_assigned',
     abstract:
-      'Source document is pending upload in the designated Google Drive research folder. The shared Google Drive folder currently contains 3 published paper PDFs. Once Paper 5 is uploaded or provided, its exact bibliographic citation, volume, issue, page range, and full abstract will be populated into this record.',
-    keywords: ['Research Portfolio', 'Scholarly Inquiry', 'Pending Ingestion'],
+      'Trust plays a very useful role in our daily life. In the modern life where everything is based on the virtual world say World Wide Web, it is very difficult to know about whom to trust and why. Most of the social recommender systems are based on the trust rating of users. Hence, it\'s important to calculate the possible relations between users in the social network and to evaluate those relations properly to improve the social recommender system for a particular user. This particular user would be termed as ego user in our Trust_System. As the popularity of social network sites grow on the worldwide web, each individual has a long friend-list on facebook. While evaluating closeness among friends is difficult, fortunately there are many user actions which can be used to evaluate their relation on the social network. The trustworthiness of a product can be determined by the facts which are being calculated by their opinion about the given facts. In this research work Trust_Friend algorithm and True_Fact algorithm are used for solving both problems e.g. closeness of friends for social recommender system (Trust_Recommeder for Trust_System) on a popular social networking site facebook.',
+    keywords: [
+      'Component Trust',
+      'Trustworthiness of facts',
+      'social network',
+      'internet',
+      'worldwide web',
+      'truefact algorithm',
+      'facebook4j',
+      'Trust_Recommeder',
+      'Trust_Friend',
+      'Java',
+      'netbeanIDE',
+    ],
+    externalUrl: 'https://www.ijedr.org',
     peerReviewed: true,
-    notes: 'Flagged for verification per Instruction 8: Source PDF missing from Drive folder.',
+    notes: 'Paper ID: IJEDR1401128. Department of Information Technology, SRM University, Kattankulathur, India.',
   },
 ];
 
@@ -240,7 +272,7 @@ export function formatApaCitation(pub: PublicationItem): string {
   }
 
   if (pub.pageRange) {
-    sourceStr += `, ${pub.pageRange}.`;
+    sourceStr += `, pp. ${pub.pageRange}.`;
   } else {
     sourceStr += '.';
   }

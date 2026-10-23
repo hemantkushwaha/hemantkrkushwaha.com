@@ -6,6 +6,7 @@ import { ResearchPage } from './pages/ResearchPage';
 import { PhilosophyPage } from './pages/PhilosophyPage';
 import { WritingsPage } from './pages/WritingsPage';
 import { AboutPage } from './pages/AboutPage';
+import { PublicationsPage } from './pages/research/PublicationsPage';
 import { ContentDetailPage } from './pages/ContentDetailPage';
 import { LecturesPage } from './pages/academics/LecturesPage';
 import { SubjectPage } from './pages/academics/SubjectPage';
@@ -63,6 +64,8 @@ function PageRouter() {
       return <AcademicsPage />;
     case '/research':
       return <ResearchPage />;
+    case '/research/publications':
+      return <PublicationsPage />;
     case '/philosophy':
       return <PhilosophyPage />;
     case '/writings':

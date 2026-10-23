@@ -28,8 +28,12 @@ async function runVisitorCounterTests() {
   console.log('🧪 RUNNING FEATURE 2: REAL VISITOR COUNTER TESTS & AUDIT FIXES');
   console.log('================================================================');
 
-  // Ensure development environment mode for initial tests
+  // Ensure development environment mode and isolate unit tests from polluting live database
   process.env.NODE_ENV = 'development';
+  const origKey = process.env.SUPABASE_SECRET_KEY;
+  const origServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.SUPABASE_SECRET_KEY;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   inMemoryVisitorStore.resetForTesting();
 
   // --- 1. Empty Counter & Initial State ---
@@ -144,6 +148,9 @@ async function runVisitorCounterTests() {
   const counterComponentCode = fs.readFileSync('src/components/common/VisitorCounter.tsx', 'utf-8');
   assert(counterComponentCode.includes("Today's Visits (UTC)") || counterComponentCode.includes("Today&apos;s Visits (UTC)"), '8.1 UI labels daily visits with UTC milestone');
   assert(counterComponentCode.includes('00:00 UTC'), '8.2 Footnote clarifies 00:00 UTC daily reset boundary');
+
+  if (origKey) process.env.SUPABASE_SECRET_KEY = origKey;
+  if (origServiceKey) process.env.SUPABASE_SERVICE_ROLE_KEY = origServiceKey;
 
   console.log('================================================================');
   console.log('🎉 ALL FEATURE 2 AUDIT & SECURITY FIX TESTS PASSED');

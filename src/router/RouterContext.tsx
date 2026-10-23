@@ -24,21 +24,29 @@ function normalizePath(rawPath: string): string {
   return clean || '/';
 }
 
+function getInitialPath(): string {
+  if (typeof window === 'undefined') return '/';
+  // If hash routing is used (e.g., /#/research/publications)
+  if (window.location.hash && window.location.hash.startsWith('#/')) {
+    return normalizePath(window.location.hash.slice(1));
+  }
+  return normalizePath(window.location.pathname);
+}
+
 export function RouterProvider({ children }: { children: ReactNode }) {
-  const [path, setPath] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return normalizePath(window.location.pathname);
-    }
-    return '/';
-  });
+  const [path, setPath] = useState<string>(getInitialPath);
 
   useEffect(() => {
-    const handlePopState = () => {
-      setPath(normalizePath(window.location.pathname));
+    const handleLocationChange = () => {
+      setPath(getInitialPath());
     };
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
   }, []);
 
   const navigate = (to: string, options?: { replace?: boolean }) => {

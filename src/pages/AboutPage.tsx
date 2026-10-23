@@ -612,6 +612,21 @@ export function AboutPage() {
                       {book.scopeDescription}
                     </p>
                   </div>
+
+                  {book.url && (
+                    <div className="pt-3 mt-4 border-t border-stone-100 flex items-center justify-between text-xs">
+                      <a
+                        href={book.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 font-medium text-stone-900 hover:text-stone-700 transition-colors"
+                      >
+                        <BookOpen className="w-3.5 h-3.5 text-stone-600" />
+                        <span>{book.urlLabel || 'View Book'}</span>
+                        <ExternalLink className="w-3 h-3 text-stone-400" />
+                      </a>
+                    </div>
+                  )}
                 </Card>
               ))}
             </div>

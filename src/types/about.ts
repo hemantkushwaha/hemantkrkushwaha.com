@@ -51,6 +51,8 @@ export interface AuthoredBook {
   year?: number | string;
   format: string;
   scopeDescription: string;
+  url?: string;
+  urlLabel?: string;
 }
 
 export interface ResearchPreprint {

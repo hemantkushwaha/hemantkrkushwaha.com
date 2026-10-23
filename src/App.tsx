@@ -12,6 +12,7 @@ import { LecturesPage } from './pages/academics/LecturesPage';
 import { SubjectPage } from './pages/academics/SubjectPage';
 import { UnitPage } from './pages/academics/UnitPage';
 import { TopicPage } from './pages/academics/TopicPage';
+import { BooksPage } from './pages/academics/BooksPage';
 import { Container } from './components/common/Container';
 import { Compass } from 'lucide-react';
 
@@ -62,6 +63,8 @@ function PageRouter() {
       return <HomePage />;
     case '/academics':
       return <AcademicsPage />;
+    case '/academics/books':
+      return <BooksPage />;
     case '/research':
       return <ResearchPage />;
     case '/research/publications':

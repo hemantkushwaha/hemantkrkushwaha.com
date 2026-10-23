@@ -11,7 +11,8 @@ interface CategoryCardProps {
 export function CategoryCard({ category }: CategoryCardProps) {
   const isLectures = category.targetUrl === '/academics/lectures';
   const isPublications = category.targetUrl === '/research/publications';
-  const isLive = isLectures || isPublications;
+  const isBooks = category.targetUrl === '/academics/books';
+  const isLive = isLectures || isPublications || isBooks;
 
   return (
     <article
@@ -61,7 +62,9 @@ export function CategoryCard({ category }: CategoryCardProps) {
         {/* Footer */}
         <div className="pt-5 mt-6 border-t border-stone-100 flex items-center justify-between text-xs text-stone-500">
           <span className={`font-medium ${isLive ? 'text-emerald-700' : 'text-stone-400'}`}>
-            {isPublications
+            {isBooks
+              ? 'Live Catalogue (5 Books)'
+              : isPublications
               ? 'Live Archive (5 Papers)'
               : isLive
               ? 'Live Navigation Available'

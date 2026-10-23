@@ -319,6 +319,8 @@ export const authoredBooks: AuthoredBook[] = [
     format: 'Academic Monograph / Scholarly Volume',
     scopeDescription:
       'Presents a comprehensive architectural model for self-adaptive computing. Proposes dynamic abstraction layers capable of restructuring execution pipelines in response to fluctuating AI workloads across heterogeneous distributed environments.',
+    url: 'https://www.elivapress.com/en/book/book-8851227556/',
+    urlLabel: 'View on Eliva Press',
   },
   {
     id: 'book-think-in-sets',
@@ -329,6 +331,8 @@ export const authoredBooks: AuthoredBook[] = [
     format: 'Academic Textbook',
     scopeDescription:
       'An introductory pedagogical handbook designed to bridge mathematical intuition and computer science practice through set theory, formal propositional logic, relations, and combinatorial reasoning.',
+    url: 'https://www.amazon.com/s?k=Think+in+Sets+Hemant+Kumar+Kushwaha',
+    urlLabel: 'View on Amazon',
   },
   {
     id: 'book-total-state-space',
@@ -339,6 +343,8 @@ export const authoredBooks: AuthoredBook[] = [
     format: 'Theoretical Treatise',
     scopeDescription:
       'Explores structural state spaces, temporal emergence, and probabilistic coexistence models, offering a formalized framework bridging computational theory and philosophical inquiry.',
+    url: 'https://books.google.com/books/about/Total_State_Space_Coexistence_Theory.html?id=Bbfb0QEACAAJ',
+    urlLabel: 'View on Google Books',
   },
   {
     id: 'book-web-stories',
@@ -349,6 +355,8 @@ export const authoredBooks: AuthoredBook[] = [
     format: 'Technical & Strategy Guide',
     scopeDescription:
       'A practical and analytical guide examining mobile-first visual narrative architectures, AMP-based web storytelling standards, and digital audience engagement methodologies.',
+    url: 'https://www.amazon.com/s?k=The+Complete+Guide+to+Web+Stories+Hemant+Kumar+Kushwaha',
+    urlLabel: 'View on Amazon',
   },
   {
     id: 'book-data-structures',
@@ -358,6 +366,8 @@ export const authoredBooks: AuthoredBook[] = [
     format: 'Foundational Textbook',
     scopeDescription:
       'A systematic introduction to programming abstractions, linear and non-linear memory representations, tree and graph traversals, and algorithmic complexity analysis for aspiring software engineers.',
+    url: 'https://www.amazon.com/s?k=Data+Structures+Approach+to+Programming+Hemant+Kumar+Kushwaha',
+    urlLabel: 'View on Amazon',
   },
 ];
 

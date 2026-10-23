@@ -14,6 +14,7 @@ export const siteConfig = {
     { label: 'Home', href: '/' },
     { label: 'Academics', href: '/academics' },
     { label: 'Research', href: '/research' },
+    { label: 'Publications', href: '/research/publications' },
     { label: 'Philosophy', href: '/philosophy' },
     { label: 'Writings', href: '/writings' },
     { label: 'About', href: '/about' },

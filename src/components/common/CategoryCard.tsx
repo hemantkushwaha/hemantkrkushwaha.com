@@ -9,7 +9,9 @@ interface CategoryCardProps {
 }
 
 export function CategoryCard({ category }: CategoryCardProps) {
-  const isLive = category.targetUrl === '/academics/lectures';
+  const isLectures = category.targetUrl === '/academics/lectures';
+  const isPublications = category.targetUrl === '/research/publications';
+  const isLive = isLectures || isPublications;
 
   return (
     <article
@@ -59,11 +61,15 @@ export function CategoryCard({ category }: CategoryCardProps) {
         {/* Footer */}
         <div className="pt-5 mt-6 border-t border-stone-100 flex items-center justify-between text-xs text-stone-500">
           <span className={`font-medium ${isLive ? 'text-emerald-700' : 'text-stone-400'}`}>
-            {isLive ? 'Live Navigation Available' : 'Structure Ready'}
+            {isPublications
+              ? 'Live Archive (5 Papers)'
+              : isLive
+              ? 'Live Navigation Available'
+              : 'Structure Ready'}
           </span>
           {isLive ? (
             <Link
-              id="link-explore-lectures"
+              id={`link-explore-${category.id}`}
               href={category.targetUrl}
               className="inline-flex items-center gap-1 font-medium text-stone-900 hover:text-stone-600 transition-colors"
             >

@@ -4,13 +4,16 @@ import { CategoryCard } from '../components/common/CategoryCard';
 import { Container } from '../components/common/Container';
 import { SectionContentFeed } from '../components/content/SectionContentFeed';
 import { usePageMetadata } from '../hooks/usePageMetadata';
-import { Feather } from 'lucide-react';
+import { publishedWritingBooks } from '../data/writingBooksData';
+import { WritingBookCard } from '../components/writings/WritingBookCard';
+import { Link } from '../router/RouterContext';
+import { Feather, Bookmark, Sparkles, ArrowRight } from 'lucide-react';
 
 export function WritingsPage() {
   usePageMetadata({
     title: 'Writings | Hemant Kumar Kushwaha',
     description:
-      'Literary collections, poetry, novels, short stories, essays, and book archives by Hemant Kumar Kushwaha.',
+      'Literary collections, poetry, novels, short stories, essays, and published books by Hemant Kumar Kushwaha.',
   });
 
   return (
@@ -24,6 +27,67 @@ export function WritingsPage() {
 
       <Container size="xl">
         <div className="space-y-16">
+          {/* Featured Published Books Section (3 Published Books) */}
+          <section
+            id="published-books"
+            aria-labelledby="published-books-heading"
+            className="rounded-2xl border border-stone-200 bg-white p-6 sm:p-8 lg:p-10 shadow-xs space-y-8"
+          >
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-stone-200">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium bg-stone-900 text-stone-50">
+                    <Sparkles className="w-3 h-3 text-amber-300" aria-hidden="true" />
+                    3 Published Books
+                  </span>
+                  <span className="text-xs text-stone-500 font-mono">
+                    Amazon KDP &bull; Notion Press
+                  </span>
+                </div>
+                <h2
+                  id="published-books-heading"
+                  className="font-serif text-2xl sm:text-3xl font-medium text-stone-950"
+                >
+                  Published Books &amp; Literary Works
+                </h2>
+                <p className="text-sm text-stone-600 max-w-2xl leading-relaxed">
+                  Published fiction novels, romantic poetry anthologies, and expressive literature authored by Hemant Kumar Kushwaha. Verified direct links to Amazon Kindle eBooks and paperback editions.
+                </p>
+              </div>
+
+              <div className="shrink-0">
+                <Link
+                  id="btn-view-all-writing-books"
+                  href="/writings/books"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-stone-900 text-stone-50 text-sm font-medium hover:bg-stone-800 transition-colors shadow-xs focus-visible:outline-2 focus-visible:outline-stone-900"
+                >
+                  <Bookmark className="w-4 h-4" aria-hidden="true" />
+                  <span>Dedicated Books Catalog</span>
+                  <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Grid of 3 Published Books */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {publishedWritingBooks.map((book) => (
+                <WritingBookCard key={book.id} book={book} />
+              ))}
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-stone-500 border-t border-stone-100">
+              <p>
+                All three book listings verified with authentic ASIN / ISBN identifiers and direct Amazon product destinations.
+              </p>
+              <Link
+                href="/writings/books"
+                className="font-medium text-stone-900 hover:underline inline-flex items-center gap-1"
+              >
+                Go to Dedicated Books Catalog &rarr;
+              </Link>
+            </div>
+          </section>
+
           {/* Real Content Database Feed */}
           <SectionContentFeed
             section="writings"

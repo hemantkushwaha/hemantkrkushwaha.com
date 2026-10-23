@@ -20,6 +20,10 @@ import {
   getZenodoContentItemBySlug,
   getZenodoTagsByContentId,
 } from '../data/zenodoResources';
+import {
+  getWritingBookContentItems,
+  getWritingBookTags,
+} from '../data/writingBooksData';
 
 /**
  * Deduplicates and sorts content items by published_at DESC.
@@ -53,10 +57,10 @@ function mergeAndSortContent(databaseItems: ContentItem[], localItems: ContentIt
  * Ordered by published_at DESC, then created_at DESC.
  */
 export async function getPublishedContent(): Promise<ContentItem[]> {
-  const zenodoItems = getZenodoContentItems();
+  const allLocalItems = [...getZenodoContentItems(), ...getWritingBookContentItems()];
   const client = getSupabaseClient();
   if (!client) {
-    return zenodoItems;
+    return allLocalItems;
   }
 
   try {
@@ -70,14 +74,14 @@ export async function getPublishedContent(): Promise<ContentItem[]> {
 
     if (error) {
       console.error('[contentService.getPublishedContent] Query error:', error.message);
-      return zenodoItems;
+      return allLocalItems;
     }
 
     const dbItems = (data as ContentItem[]) || [];
-    return mergeAndSortContent(dbItems, zenodoItems);
+    return mergeAndSortContent(dbItems, allLocalItems);
   } catch (err) {
     console.error('[contentService.getPublishedContent] Unexpected error:', err);
-    return zenodoItems;
+    return allLocalItems;
   }
 }
 
@@ -91,36 +95,40 @@ export async function getContentBySlug(slug: string): Promise<ContentItem | null
     return null;
   }
 
-  const normalizedSlug = slug.trim();
+  const normalizedSlug = slug.trim().toLowerCase();
   const localZenodoItem = getZenodoContentItemBySlug(normalizedSlug);
+  const localWritingItem = getWritingBookContentItems().find(
+    (item) => item.slug.toLowerCase() === normalizedSlug
+  );
+  const localItem = localZenodoItem || localWritingItem || null;
 
   const client = getSupabaseClient();
   if (!client) {
-    return localZenodoItem || null;
+    return localItem;
   }
 
   try {
     const { data, error } = await client
       .from('content')
       .select('*')
-      .eq('slug', normalizedSlug)
+      .eq('slug', slug.trim())
       .eq('status', 'published')
       .eq('visibility', 'public')
       .maybeSingle();
 
     if (error) {
       console.error(`[contentService.getContentBySlug] Query error for slug "${slug}":`, error.message);
-      return localZenodoItem || null;
+      return localItem;
     }
 
     if (data) {
       return data as ContentItem;
     }
 
-    return localZenodoItem || null;
+    return localItem;
   } catch (err) {
     console.error(`[contentService.getContentBySlug] Unexpected error for slug "${slug}":`, err);
-    return localZenodoItem || null;
+    return localItem;
   }
 }
 
@@ -137,6 +145,8 @@ export async function getContentBySection(section: SectionId | string): Promise<
 
   const localSectionItems = section === 'academics'
     ? getZenodoContentItems().filter((item) => item.section === 'academics')
+    : section === 'writings'
+    ? getWritingBookContentItems()
     : [];
 
   const client = getSupabaseClient();
@@ -180,7 +190,8 @@ export async function getContentByCategory(
     return [];
   }
 
-  const localCategoryItems = getZenodoContentItems().filter(
+  const allLocal = [...getZenodoContentItems(), ...getWritingBookContentItems()];
+  const localCategoryItems = allLocal.filter(
     (item) => item.section === section && item.category.toLowerCase() === category.toLowerCase()
   );
 
@@ -219,7 +230,8 @@ export async function getContentByCategory(
  * Ordered by published_at DESC, then created_at DESC.
  */
 export async function getFeaturedContent(): Promise<ContentItem[]> {
-  const localFeatured = getZenodoContentItems().filter((item) => item.is_featured);
+  const allLocal = [...getZenodoContentItems(), ...getWritingBookContentItems()];
+  const localFeatured = allLocal.filter((item) => item.is_featured);
   const client = getSupabaseClient();
   if (!client) {
     return localFeatured;
@@ -259,11 +271,10 @@ export async function getRelatedContent(contentId: string): Promise<ContentItem[
     return [];
   }
 
-  // Check if contentId is a Zenodo resource
-  const allZenodo = getZenodoContentItems();
-  const isZenodoItem = allZenodo.some((item) => item.id === contentId || item.slug === contentId);
-  const localRelated = isZenodoItem
-    ? allZenodo.filter((item) => item.id !== contentId && item.slug !== contentId)
+  const allLocal = [...getZenodoContentItems(), ...getWritingBookContentItems()];
+  const targetItem = allLocal.find((item) => item.id === contentId || item.slug === contentId);
+  const localRelated = targetItem
+    ? allLocal.filter((item) => item.section === targetItem.section && item.id !== targetItem.id && item.slug !== targetItem.slug)
     : [];
 
   const client = getSupabaseClient();
@@ -332,7 +343,9 @@ export async function getContentTags(contentId: string): Promise<Tag[]> {
     return [];
   }
 
-  const localTags = getZenodoTagsByContentId(contentId);
+  const zenodoTags = getZenodoTagsByContentId(contentId);
+  const writingTags = getWritingBookTags(contentId);
+  const localTags = zenodoTags.length > 0 ? zenodoTags : writingTags;
 
   const client = getSupabaseClient();
   if (!client) {

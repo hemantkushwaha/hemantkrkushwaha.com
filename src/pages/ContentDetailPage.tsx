@@ -6,6 +6,7 @@ import { Badge } from '../components/common/Badge';
 import { Link } from '../router/RouterContext';
 import { usePageMetadata } from '../hooks/usePageMetadata';
 import { getZenodoMetadata } from '../data/zenodoResources';
+import { getWritingBookBySlug } from '../data/writingBooksData';
 import {
   Calendar,
   Sparkles,
@@ -557,6 +558,59 @@ export function ContentDetailPage({ slug }: ContentDetailPageProps) {
                       </p>
                     </div>
                     <ExternalLink className="w-4 h-4 text-stone-400 group-hover:text-stone-900 transition-colors shrink-0 ml-3" aria-hidden="true" />
+                  </a>
+                </div>
+              </div>
+            );
+          }
+
+          const writingBook = getWritingBookBySlug(content.slug);
+          if (writingBook) {
+            return (
+              <div id="content-detail-writing-book" className="pt-8 my-8 border-t border-stone-200 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-stone-100">
+                  <div className="space-y-1">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-medium bg-stone-900 text-stone-50">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" aria-hidden="true" />
+                      Published Book Publication
+                    </span>
+                    <h2 className="font-serif text-xl sm:text-2xl font-medium text-stone-950">
+                      Official Book Listing &amp; Ordering
+                    </h2>
+                  </div>
+                  <span className="text-xs font-mono text-stone-500">
+                    {writingBook.publisher} &bull; {writingBook.format}
+                  </span>
+                </div>
+
+                <div className="rounded-xl border border-stone-900 bg-stone-950 text-stone-50 p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 shadow-xs">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-amber-300 text-xs font-mono tracking-wider uppercase">
+                      <BookOpen className="w-4 h-4" aria-hidden="true" />
+                      <span>{writingBook.format} Edition &bull; {writingBook.language}</span>
+                    </div>
+                    <h3 className="font-serif text-lg sm:text-xl font-medium text-white">
+                      {writingBook.title}
+                    </h3>
+                    <p className="text-xs sm:text-sm text-stone-300 leading-relaxed max-w-xl">
+                      {writingBook.subtitle || writingBook.description}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3 pt-1 text-xs font-mono text-stone-400">
+                      {writingBook.asin && <span>ASIN: <strong className="text-stone-200">{writingBook.asin}</strong></span>}
+                      {writingBook.isbn10 && <span>ISBN-10: <strong className="text-stone-200">{writingBook.isbn10}</strong></span>}
+                      {writingBook.isbn13 && <span>ISBN-13: <strong className="text-stone-200">{writingBook.isbn13}</strong></span>}
+                    </div>
+                  </div>
+
+                  <a
+                    id="btn-buy-amazon-primary"
+                    href={writingBook.amazonUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-white text-stone-950 font-medium text-sm hover:bg-stone-100 transition-colors shadow-2xs focus-visible:outline-2 focus-visible:outline-white"
+                  >
+                    <span>{writingBook.urlLabel}</span>
+                    <ExternalLink className="w-4 h-4 text-stone-900" aria-hidden="true" />
                   </a>
                 </div>
               </div>

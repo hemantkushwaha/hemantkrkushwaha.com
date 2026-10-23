@@ -15,6 +15,37 @@
 
 import { getSupabaseClient } from '../lib/supabase';
 import type { ContentItem, SectionId, Tag } from '../types/content';
+import {
+  getZenodoContentItems,
+  getZenodoContentItemBySlug,
+  getZenodoTagsByContentId,
+} from '../data/zenodoResources';
+
+/**
+ * Deduplicates and sorts content items by published_at DESC.
+ * Supabase records take precedence; verified registry records fill when not in DB.
+ */
+function mergeAndSortContent(databaseItems: ContentItem[], localItems: ContentItem[]): ContentItem[] {
+  const map = new Map<string, ContentItem>();
+  for (const item of databaseItems) {
+    if (item && item.slug) {
+      map.set(item.slug.toLowerCase().trim(), item);
+    }
+  }
+  for (const item of localItems) {
+    if (item && item.slug) {
+      const key = item.slug.toLowerCase().trim();
+      if (!map.has(key)) {
+        map.set(key, item);
+      }
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => {
+    const timeA = a.published_at ? new Date(a.published_at).getTime() : 0;
+    const timeB = b.published_at ? new Date(b.published_at).getTime() : 0;
+    return timeB - timeA;
+  });
+}
 
 /**
  * 1. getPublishedContent
@@ -22,9 +53,10 @@ import type { ContentItem, SectionId, Tag } from '../types/content';
  * Ordered by published_at DESC, then created_at DESC.
  */
 export async function getPublishedContent(): Promise<ContentItem[]> {
+  const zenodoItems = getZenodoContentItems();
   const client = getSupabaseClient();
   if (!client) {
-    return [];
+    return zenodoItems;
   }
 
   try {
@@ -38,13 +70,14 @@ export async function getPublishedContent(): Promise<ContentItem[]> {
 
     if (error) {
       console.error('[contentService.getPublishedContent] Query error:', error.message);
-      return [];
+      return zenodoItems;
     }
 
-    return (data as ContentItem[]) || [];
+    const dbItems = (data as ContentItem[]) || [];
+    return mergeAndSortContent(dbItems, zenodoItems);
   } catch (err) {
     console.error('[contentService.getPublishedContent] Unexpected error:', err);
-    return [];
+    return zenodoItems;
   }
 }
 
@@ -58,29 +91,36 @@ export async function getContentBySlug(slug: string): Promise<ContentItem | null
     return null;
   }
 
+  const normalizedSlug = slug.trim();
+  const localZenodoItem = getZenodoContentItemBySlug(normalizedSlug);
+
   const client = getSupabaseClient();
   if (!client) {
-    return null;
+    return localZenodoItem || null;
   }
 
   try {
     const { data, error } = await client
       .from('content')
       .select('*')
-      .eq('slug', slug.trim())
+      .eq('slug', normalizedSlug)
       .eq('status', 'published')
       .eq('visibility', 'public')
       .maybeSingle();
 
     if (error) {
       console.error(`[contentService.getContentBySlug] Query error for slug "${slug}":`, error.message);
-      return null;
+      return localZenodoItem || null;
     }
 
-    return (data as ContentItem) || null;
+    if (data) {
+      return data as ContentItem;
+    }
+
+    return localZenodoItem || null;
   } catch (err) {
     console.error(`[contentService.getContentBySlug] Unexpected error for slug "${slug}":`, err);
-    return null;
+    return localZenodoItem || null;
   }
 }
 
@@ -95,9 +135,13 @@ export async function getContentBySection(section: SectionId | string): Promise<
     return [];
   }
 
+  const localSectionItems = section === 'academics'
+    ? getZenodoContentItems().filter((item) => item.section === 'academics')
+    : [];
+
   const client = getSupabaseClient();
   if (!client) {
-    return [];
+    return localSectionItems;
   }
 
   try {
@@ -112,13 +156,14 @@ export async function getContentBySection(section: SectionId | string): Promise<
 
     if (error) {
       console.error(`[contentService.getContentBySection] Query error for section "${section}":`, error.message);
-      return [];
+      return localSectionItems;
     }
 
-    return (data as ContentItem[]) || [];
+    const dbItems = (data as ContentItem[]) || [];
+    return mergeAndSortContent(dbItems, localSectionItems);
   } catch (err) {
     console.error(`[contentService.getContentBySection] Unexpected error for section "${section}":`, err);
-    return [];
+    return localSectionItems;
   }
 }
 
@@ -135,9 +180,13 @@ export async function getContentByCategory(
     return [];
   }
 
+  const localCategoryItems = getZenodoContentItems().filter(
+    (item) => item.section === section && item.category.toLowerCase() === category.toLowerCase()
+  );
+
   const client = getSupabaseClient();
   if (!client) {
-    return [];
+    return localCategoryItems;
   }
 
   try {
@@ -153,13 +202,14 @@ export async function getContentByCategory(
 
     if (error) {
       console.error(`[contentService.getContentByCategory] Query error for section "${section}", category "${category}":`, error.message);
-      return [];
+      return localCategoryItems;
     }
 
-    return (data as ContentItem[]) || [];
+    const dbItems = (data as ContentItem[]) || [];
+    return mergeAndSortContent(dbItems, localCategoryItems);
   } catch (err) {
     console.error(`[contentService.getContentByCategory] Unexpected error for section "${section}", category "${category}":`, err);
-    return [];
+    return localCategoryItems;
   }
 }
 
@@ -169,9 +219,10 @@ export async function getContentByCategory(
  * Ordered by published_at DESC, then created_at DESC.
  */
 export async function getFeaturedContent(): Promise<ContentItem[]> {
+  const localFeatured = getZenodoContentItems().filter((item) => item.is_featured);
   const client = getSupabaseClient();
   if (!client) {
-    return [];
+    return localFeatured;
   }
 
   try {
@@ -186,13 +237,14 @@ export async function getFeaturedContent(): Promise<ContentItem[]> {
 
     if (error) {
       console.error('[contentService.getFeaturedContent] Query error:', error.message);
-      return [];
+      return localFeatured;
     }
 
-    return (data as ContentItem[]) || [];
+    const dbItems = (data as ContentItem[]) || [];
+    return mergeAndSortContent(dbItems, localFeatured);
   } catch (err) {
     console.error('[contentService.getFeaturedContent] Unexpected error:', err);
-    return [];
+    return localFeatured;
   }
 }
 
@@ -207,9 +259,16 @@ export async function getRelatedContent(contentId: string): Promise<ContentItem[
     return [];
   }
 
+  // Check if contentId is a Zenodo resource
+  const allZenodo = getZenodoContentItems();
+  const isZenodoItem = allZenodo.some((item) => item.id === contentId || item.slug === contentId);
+  const localRelated = isZenodoItem
+    ? allZenodo.filter((item) => item.id !== contentId && item.slug !== contentId)
+    : [];
+
   const client = getSupabaseClient();
   if (!client) {
-    return [];
+    return localRelated;
   }
 
   try {
@@ -221,11 +280,11 @@ export async function getRelatedContent(contentId: string): Promise<ContentItem[
 
     if (relError) {
       console.error(`[contentService.getRelatedContent] Relationship query error for id "${contentId}":`, relError.message);
-      return [];
+      return localRelated;
     }
 
     if (!relationships || relationships.length === 0) {
-      return [];
+      return localRelated;
     }
 
     // Collect all related IDs excluding the queried contentId
@@ -238,7 +297,7 @@ export async function getRelatedContent(contentId: string): Promise<ContentItem[
     ).filter((id): id is string => Boolean(id) && id !== contentId);
 
     if (relatedIds.length === 0) {
-      return [];
+      return localRelated;
     }
 
     // Fetch related content items (only published and public)
@@ -253,13 +312,14 @@ export async function getRelatedContent(contentId: string): Promise<ContentItem[
 
     if (itemsError) {
       console.error(`[contentService.getRelatedContent] Content fetch error for related items:`, itemsError.message);
-      return [];
+      return localRelated;
     }
 
-    return (relatedItems as ContentItem[]) || [];
+    const dbItems = (relatedItems as ContentItem[]) || [];
+    return mergeAndSortContent(dbItems, localRelated);
   } catch (err) {
     console.error(`[contentService.getRelatedContent] Unexpected error for id "${contentId}":`, err);
-    return [];
+    return localRelated;
   }
 }
 
@@ -272,9 +332,11 @@ export async function getContentTags(contentId: string): Promise<Tag[]> {
     return [];
   }
 
+  const localTags = getZenodoTagsByContentId(contentId);
+
   const client = getSupabaseClient();
   if (!client) {
-    return [];
+    return localTags;
   }
 
   try {
@@ -286,11 +348,11 @@ export async function getContentTags(contentId: string): Promise<Tag[]> {
 
     if (junctionError) {
       console.error(`[contentService.getContentTags] Junction query error for contentId "${contentId}":`, junctionError.message);
-      return [];
+      return localTags;
     }
 
     if (!junctionRows || junctionRows.length === 0) {
-      return [];
+      return localTags;
     }
 
     const tagIds = Array.from(
@@ -298,7 +360,7 @@ export async function getContentTags(contentId: string): Promise<Tag[]> {
     ).filter(Boolean);
 
     if (tagIds.length === 0) {
-      return [];
+      return localTags;
     }
 
     // 2. Fetch tag records from tags table
@@ -310,12 +372,17 @@ export async function getContentTags(contentId: string): Promise<Tag[]> {
 
     if (tagsError) {
       console.error(`[contentService.getContentTags] Tags fetch error:`, tagsError.message);
-      return [];
+      return localTags;
     }
 
-    return (tagsData as Tag[]) || [];
+    const dbTags = (tagsData as Tag[]) || [];
+    if (dbTags.length > 0) {
+      return dbTags;
+    }
+
+    return localTags;
   } catch (err) {
     console.error(`[contentService.getContentTags] Unexpected error for contentId "${contentId}":`, err);
-    return [];
+    return localTags;
   }
 }

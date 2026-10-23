@@ -5,6 +5,7 @@ import { Container } from '../components/common/Container';
 import { Badge } from '../components/common/Badge';
 import { Link } from '../router/RouterContext';
 import { usePageMetadata } from '../hooks/usePageMetadata';
+import { getZenodoMetadata } from '../data/zenodoResources';
 import {
   Calendar,
   Sparkles,
@@ -21,6 +22,9 @@ import {
   GraduationCap,
   Microscope,
   Feather,
+  FileCheck,
+  Globe,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface ContentDetailPageProps {
@@ -456,55 +460,162 @@ export function ContentDetailPage({ slug }: ContentDetailPageProps) {
           </div>
         )}
 
-        {/* External URL & File Links (Only when available) */}
-        {(content.external_url || content.file_url) && (
-          <div className="pt-8 my-8 border-t border-stone-200 space-y-4">
-            <h2 className="font-serif text-lg font-medium text-stone-950">
-              Resources &amp; Attachments
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* External Resource URL */}
-              {content.external_url && content.external_url.trim() !== '' && (
-                <a
-                  href={content.external_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between p-4 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100/80 transition-colors group"
-                >
-                  <div className="space-y-1">
-                    <span className="text-xs font-mono uppercase tracking-wider text-stone-500">
-                      External Resource
-                    </span>
-                    <p className="text-sm font-medium text-stone-900 line-clamp-1">
-                      {content.external_url}
-                    </p>
-                  </div>
-                  <ExternalLink className="w-4 h-4 text-stone-500 group-hover:text-stone-900 transition-colors shrink-0 ml-2" aria-hidden="true" />
-                </a>
-              )}
+        {/* External URL & File Links */}
+        {(() => {
+          const zenodoMeta = getZenodoMetadata(content.id) || getZenodoMetadata(content.slug);
 
-              {/* Downloadable / Accessible File Link */}
-              {content.file_url && content.file_url.trim() !== '' && (
-                <a
-                  href={content.file_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between p-4 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100/80 transition-colors group"
-                >
+          if (zenodoMeta) {
+            const formattedSizeMb = (zenodoMeta.pdfFileSizeBytes / (1024 * 1024)).toFixed(2);
+            return (
+              <div id="content-detail-zenodo-resources" className="pt-8 my-8 border-t border-stone-200 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-stone-100">
                   <div className="space-y-1">
-                    <span className="text-xs font-mono uppercase tracking-wider text-stone-500">
-                      Document / File Attachment
-                    </span>
-                    <p className="text-sm font-medium text-stone-900 line-clamp-1">
-                      Download Attached Resource
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-medium bg-emerald-50 text-emerald-900 border border-emerald-200">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                        Verified Open Access · {zenodoMeta.license}
+                      </span>
+                    </div>
+                    <h2 className="font-serif text-xl sm:text-2xl font-medium text-stone-950">
+                      Open Educational Resource Assets
+                    </h2>
+                  </div>
+                  <span className="text-xs font-mono text-stone-500">
+                    CERN / OpenAIRE Zenodo Repository
+                  </span>
+                </div>
+
+                {/* Primary Download Banner */}
+                <div className="rounded-xl border border-stone-900 bg-stone-950 text-stone-50 p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 shadow-xs">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-amber-300 text-xs font-mono tracking-wider uppercase">
+                      <FileCheck className="w-4 h-4" aria-hidden="true" />
+                      <span>Full Educational Resource Document</span>
+                    </div>
+                    <h3 className="font-serif text-lg sm:text-xl font-medium text-white">
+                      {zenodoMeta.pdfFileName}
+                    </h3>
+                    <p className="text-xs sm:text-sm text-stone-300 leading-relaxed max-w-xl">
+                      Direct download of the complete lecture notes and pedagogical reference document ({formattedSizeMb} MB).
                     </p>
                   </div>
-                  <Download className="w-4 h-4 text-stone-500 group-hover:text-stone-900 transition-colors shrink-0 ml-2" aria-hidden="true" />
-                </a>
-              )}
-            </div>
-          </div>
-        )}
+                  <a
+                    id="btn-download-pdf-primary"
+                    href={zenodoMeta.pdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-white text-stone-950 font-medium text-sm hover:bg-stone-100 transition-colors shadow-2xs focus-visible:outline-2 focus-visible:outline-white"
+                  >
+                    <Download className="w-4 h-4 text-stone-900" aria-hidden="true" />
+                    <span>Download PDF ({formattedSizeMb} MB)</span>
+                  </a>
+                </div>
+
+                {/* Secondary Verified Repository Links: DOI and Zenodo Record */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* DOI Link */}
+                  <a
+                    id="link-zenodo-doi"
+                    href={zenodoMeta.doiUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between p-5 rounded-xl border border-stone-200 bg-white hover:border-stone-400 hover:shadow-xs transition-all group"
+                  >
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-mono uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
+                        <Globe className="w-3.5 h-3.5 text-stone-400" aria-hidden="true" />
+                        Digital Object Identifier (DOI)
+                      </span>
+                      <p className="text-sm font-semibold text-stone-900 group-hover:text-stone-950">
+                        {zenodoMeta.doi}
+                      </p>
+                      <p className="text-xs text-stone-500 font-mono">
+                        Permanent scholarly resolver
+                      </p>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-stone-400 group-hover:text-stone-900 transition-colors shrink-0 ml-3" aria-hidden="true" />
+                  </a>
+
+                  {/* Zenodo Record Link */}
+                  <a
+                    id="link-zenodo-record"
+                    href={zenodoMeta.recordUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between p-5 rounded-xl border border-stone-200 bg-white hover:border-stone-400 hover:shadow-xs transition-all group"
+                  >
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-mono uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
+                        <BookOpen className="w-3.5 h-3.5 text-stone-400" aria-hidden="true" />
+                        Zenodo Repository Record
+                      </span>
+                      <p className="text-sm font-semibold text-stone-900 group-hover:text-stone-950">
+                        Record #{zenodoMeta.zenodoId}
+                      </p>
+                      <p className="text-xs text-stone-500 font-mono">
+                        zenodo.org/records/{zenodoMeta.zenodoId}
+                      </p>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-stone-400 group-hover:text-stone-900 transition-colors shrink-0 ml-3" aria-hidden="true" />
+                  </a>
+                </div>
+              </div>
+            );
+          }
+
+          if (content.external_url || content.file_url) {
+            return (
+              <div className="pt-8 my-8 border-t border-stone-200 space-y-4">
+                <h2 className="font-serif text-lg font-medium text-stone-950">
+                  Resources &amp; Attachments
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* External Resource URL */}
+                  {content.external_url && content.external_url.trim() !== '' && (
+                    <a
+                      href={content.external_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between p-4 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100/80 transition-colors group"
+                    >
+                      <div className="space-y-1">
+                        <span className="text-xs font-mono uppercase tracking-wider text-stone-500">
+                          External Resource
+                        </span>
+                        <p className="text-sm font-medium text-stone-900 line-clamp-1">
+                          {content.external_url}
+                        </p>
+                      </div>
+                      <ExternalLink className="w-4 h-4 text-stone-500 group-hover:text-stone-900 transition-colors shrink-0 ml-2" aria-hidden="true" />
+                    </a>
+                  )}
+
+                  {/* Downloadable / Accessible File Link */}
+                  {content.file_url && content.file_url.trim() !== '' && (
+                    <a
+                      href={content.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between p-4 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100/80 transition-colors group"
+                    >
+                      <div className="space-y-1">
+                        <span className="text-xs font-mono uppercase tracking-wider text-stone-500">
+                          Document / File Attachment
+                        </span>
+                        <p className="text-sm font-medium text-stone-900 line-clamp-1">
+                          Download Attached Resource
+                        </p>
+                      </div>
+                      <Download className="w-4 h-4 text-stone-500 group-hover:text-stone-900 transition-colors shrink-0 ml-2" aria-hidden="true" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          return null;
+        })()}
 
         {/* Related Content Section (Only displayed when related public items exist) */}
         {relatedItems.length > 0 && (

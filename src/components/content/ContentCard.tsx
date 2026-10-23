@@ -2,7 +2,7 @@ import { ContentItem } from '../../types/content';
 import { Card } from '../common/Card';
 import { Badge } from '../common/Badge';
 import { Link } from '../../router/RouterContext';
-import { Sparkles, Calendar, Tag as TagIcon, ArrowRight } from 'lucide-react';
+import { Sparkles, Calendar, Tag as TagIcon, ArrowRight, Download } from 'lucide-react';
 
 interface ContentCardProps {
   item: ContentItem;
@@ -75,6 +75,13 @@ export function ContentCard({ item, id }: ContentCardProps) {
                 {formattedType}
               </span>
             )}
+
+            {item.file_url && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono font-medium text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded">
+                <Download className="w-3 h-3 text-emerald-600" aria-hidden="true" />
+                PDF
+              </span>
+            )}
           </div>
 
           {/* Title */}
@@ -102,7 +109,7 @@ export function ContentCard({ item, id }: ContentCardProps) {
           )}
 
           <span className="inline-flex items-center gap-1 font-medium text-stone-700 group-hover:text-stone-950 transition-colors">
-            <span>Read Publication</span>
+            <span>{item.category === 'Study Material' ? 'View Study Material' : 'Read Publication'}</span>
             <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
           </span>
         </div>
